@@ -8,3 +8,6 @@ playwright-report/
 *.log
 .DS_Store
 *.sqlite*
+dist-mcp/
+plugins/arborun/dist-mcp/
+.arborun-mcp/

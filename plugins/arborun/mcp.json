@@ -1,0 +1,12 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "arborun": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${PLUGIN_ROOT}/dist-mcp/index.mjs"],
+      "cwd": "${PLUGIN_ROOT}",
+      "env": { "ARBORUN_MCP_DATA_DIR": "${PLUGIN_DATA}/state" }
+    }
+  }
+}

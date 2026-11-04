@@ -1,0 +1,21 @@
+{
+  "title": "验证 Arborun MCP（示例计划）",
+  "goal": "验证编辑、批准、执行跟踪与结果验收的闭环。此树是可编辑示例，尚未开始实际执行。",
+  "context": ["用户已选择 Codex 桌面端优先。", "核心协议与浏览器界面分别检查；原生侧栏挂载需另行实测。"],
+  "agents": [
+    { "id": "main", "name": "主 Agent", "role": "核对需求并汇总结果", "scope": "src/mcp、docs/mcp-hosts.md", "budget": "本轮最多 8 次检查操作，不部署或发布" },
+    { "id": "protocol", "name": "协议检查 Agent", "parentId": "main", "role": "验证批准与事件协议", "scope": "tests/mcp-core.test.ts、tests/mcp-transport.test.ts", "budget": "最多运行 2 轮定向测试，失败返回原因" },
+    { "id": "ui", "name": "交互检查 Agent", "parentId": "main", "role": "验证树的编辑与验收", "scope": "tests/mcp-ui.e2e.ts、本地预览", "budget": "最多运行 2 轮浏览器检查，不改变全局设置" }
+  ],
+  "nodes": [
+    { "id": "root", "parentId": null, "kind": "group", "title": "验证完整闭环" },
+    { "id": "scope", "parentId": "root", "kind": "action", "title": "核对本轮需求和验证范围", "action": "阅读已确定的 MCP 流程与宿主边界，列出本轮验收项", "target": "docs/plans/2026-11-04-mcp.md", "input": "用户明确的树编辑、批准、执行与验收要求", "acceptance": ["每项用户要求都有对应验证动作"], "failure": "列出缺失项，修改计划后重新等待批准" },
+    { "id": "parallel", "parentId": "root", "kind": "group", "title": "分别检查协议和界面" },
+    { "id": "protocol-check", "parentId": "parallel", "kind": "agent", "title": "验证批准、版本与并发执行", "agentId": "protocol", "action": "运行 MCP 核心与传输测试，汇总失败信息", "target": "tests/mcp-core.test.ts、tests/mcp-transport.test.ts", "input": "当前代码和 scope 节点确认的验收项", "acceptance": ["未批准执行被拒绝", "旧版本结果不能覆盖新版本", "两个 Agent 可以领取独立节点"], "failure": "失败时上报命令与错误，返回主 Agent 制定修正分支", "dependsOn": ["scope"] },
+    { "id": "ui-check", "parentId": "parallel", "kind": "agent", "title": "验证节点编辑和结果验收", "agentId": "ui", "action": "在窄侧栏尺寸检查编辑、批准、执行位置和验收操作", "target": "tests/mcp-ui.e2e.ts、本地树界面", "input": "与协议检查相同的任务版本", "acceptance": ["直接编辑保存到正确节点", "可见每个活跃 Agent 的执行位置", "执行完成与用户验收分开显示"], "failure": "保存截图和复现步骤，返回主 Agent 制定修正分支", "dependsOn": ["scope"] },
+    { "id": "native-condition", "parentId": "root", "kind": "condition", "title": "当前宿主是否已经加载 Arborun 插件", "action": "检查宿主 MCP 连接与会话面板入口", "target": "Codex MCP 状态和 Arborun 面板", "input": "本地插件包和当前宿主状态", "acceptance": ["用可观察的连接状态给出 true、false 或 unknown"], "failure": "无法判断时报告 unknown，不将原生挂载标记为已完成", "dependsOn": ["protocol-check", "ui-check"] },
+    { "id": "native-test", "parentId": "root", "kind": "action", "title": "在原生面板核对完整流程", "action": "检查打开、编辑、批准后续跑、执行位置与验收树", "target": "Codex 当前会话侧面板", "input": "已经加载的 Arborun 插件", "acceptance": ["原生面板每个阶段都有实际记录"], "failure": "记录不支持的阶段与错误，不把浏览器验证替代宿主验证", "when": { "nodeId": "native-condition", "outcome": true } },
+    { "id": "install-notes", "parentId": "root", "kind": "action", "title": "记录宿主接入所需步骤", "action": "核对插件包和安装步骤，明确原生验证仍待完成", "target": "plugins/arborun、docs/mcp-hosts.md", "input": "条件节点确认宿主尚未加载插件", "acceptance": ["交付说明准确区分测试完成与原生待验证"], "failure": "补充缺失的配置路径与加载步骤", "when": { "nodeId": "native-condition", "outcome": false } },
+    { "id": "review", "parentId": "root", "kind": "action", "title": "检查子 Agent 结果并提交验收树", "action": "核对两个 Agent 的检查证据与宿主验证状态，汇总对应节点结果", "target": "本任务的结果与产物", "input": "协议、界面与宿主分支的实际记录", "acceptance": ["每个完成节点有结果和检查依据", "未验证能力明确列出"], "failure": "退回有问题的节点，修改计划并重新等待批准", "dependsOn": ["protocol-check", "ui-check", "native-test", "install-notes"] }
+  ]
+}

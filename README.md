@@ -1,63 +1,69 @@
 ```text
 Arborun
-├─ 定位
-│  └─ 用可编辑的树组织意图、条件、决策、执行与交付。
-├─ 当前版本
-│  ├─ 0.1.0 本地 MVP，Electron + React + TypeScript。
-│  ├─ 独立 Harness 进程负责模型循环、工具、审批、预算和恢复。
-│  └─ 计划面向 macOS、Windows、Linux；实机验收状态见 docs/verification.md。
-├─ 快速运行
-│  ├─ 环境：Node.js 24 或更新版本、pnpm 10。
+├─ 当前主线：MCP 0.2.0
+│  ├─ 接入现有 Agent 工具，以可编辑的树组织计划、执行过程与结果验收。
+│  ├─ 宿主负责理解上下文、调用工具、创建 Agent；Arborun 负责树与协作状态。
+│  ├─ Codex 桌面端优先；标准 MCP 工具和 MCP Apps UI 保持可移植。
+│  └─ 原独立桌面原型保留，说明见 docs/desktop-mvp.md；不是本轮默认入口。
+├─ 使用流程
+│  ├─ 用户输入 → 宿主结合上下文调用 arborun_plan。
+│  ├─ 用户直接改节点、层级、依赖和条件，或让 AI 修改；更新后产生新版本。
+│  ├─ 用户批准当前版本 → 宿主读取批准并逐节点领取、执行和上报。
+│  ├─ 树显示 Agent 位置、问题、通过条件、证据和结果。
+│  └─ 全部完成 → arborun_submit 生成验收树 → 用户验收或要求修改。
+├─ 本地运行
+│  ├─ 环境：Node.js 22 或更新版本、pnpm 10。
 │  ├─ 安装：pnpm install --frozen-lockfile
-│  ├─ 构建：pnpm build
-│  ├─ 打开桌面应用：pnpm start
-│  └─ pnpm dev 仅启动界面开发服务器；实际执行需要 Electron 桥接。
-├─ 第一次体验
-│  ├─ 打开预置 CSV 导出任务，单击节点编辑具体动作和通过条件。
-│  ├─ 确认并运行，在执行树中查看读取、条件判断与子 Agent 核验。
-│  ├─ 选择冲突编码的处理口径，继续生成需求树与验收树。
-│  ├─ 选中已完成节点重新执行，查看新产物与历史版本。
-│  └─ 导出包含任务 JSON、树形 Markdown 和所有产物版本的目录。
-├─ 模型执行
-│  ├─ 在“模型连接”中填写兼容 Chat Completions 的 API 基础地址、模型名称和密钥。
-│  ├─ 基础地址通常以 /v1 结尾；也可以填写完整 /chat/completions 地址。
-│  ├─ 模型服务需支持 function tools、tool_calls 和 max_completion_tokens。
-│  ├─ 远端要求 HTTPS，本机服务允许 localhost HTTP；不自动跟随重定向。
-│  ├─ 创建模型任务，导入 UTF-8 TXT、Markdown 或 JSON 资料，再生成计划。
-│  ├─ 生成计划会向已配置服务发送任务要求和选定资料摘要；执行按需发送资料内容。
-│  └─ 演示模式使用预置本地逻辑，不调用模型，不作为实际模型能力证明。
-├─ 已实现
-│  ├─ 节点编辑、增删、父子调整、显式依赖与结构校验。
-│  ├─ 条件成立／不成立／未知，人工决策与一层受限子 Agent。
-│  ├─ 实时执行事件、版本确认、预算、暂停取消与局部重试。
-│  ├─ 产物版本、候选与采用状态、引用检查和 SQLite 保存。
-│  └─ 重启恢复、单实例保护、文件导入与任务导出。
-├─ 边界
-│  ├─ 同时运行一项任务；子 Agent 以独立上下文串行执行，不递归派生。
-│  ├─ 内置工具仅处理已选资料快照与任务产物，不执行任意 Shell 或浏览器操作。
-│  ├─ 自动验证覆盖结构、来源和执行条件；业务质量仍需用户审阅。
-│  ├─ 模型响应以每次工具调用完成为边界更新，不展示逐字流或模型内部思维链。
-│  ├─ 任务包已支持导出，图形界面导入任务包尚未实现。
-│  └─ 无自动更新、实时云同步、多人协作或远端任务服务。
-├─ 本地数据
-│  ├─ 数据库在系统应用数据目录，使用 SQLite WASM 与原子快照保存。
-│  ├─ 模型密钥采用可用的系统保护；无法可靠保护时只在当前会话保留。
-│  ├─ 密钥不进入任务包；任务包包含导入资料快照，应由用户自行管理分享范围。
-│  └─ 用户数据和公司资产留在代码仓库之外，云盘可备份导出的完整任务目录。
-├─ 开发验证
-│  ├─ pnpm test：Harness、文件工具、存储与模型协议测试。
-│  ├─ pnpm typecheck：类型检查。
-│  ├─ pnpm build && pnpm test:e2e：实际 Electron 桌面闭环测试。
-│  ├─ pnpm package:mac：macOS 本地未签名应用包。
-│  ├─ pnpm package:win：Windows NSIS 构建入口，需要对应环境验证。
-│  └─ pnpm package:linux：Linux Debian 构建入口，需要对应环境验证。
-├─ 仓库组织
-│  ├─ src/shared：数据契约与演示资料。
-│  ├─ src/harness：执行引擎、模型连接和 SQLite 存储。
-│  ├─ src/desktop：Electron 主进程、preload 和独立运行进程。
-│  ├─ src/renderer：树编辑与执行界面。
-│  └─ tests、docs、examples、resources：测试、树形文档、示例与应用图标。
-└─ 开源状态
-   ├─ 产品方向为完全开源，单一公开 arborun 仓库承载代码与文档。
-   └─ 具体开源许可证尚未选定，本次实现未代选许可证或创建公开 Release。
+│  ├─ 构建：pnpm build:mcp
+│  ├─ MCP 启动：pnpm start:mcp
+│  │  ├─ stdout 专用于 stdio MCP；诊断与预览地址写入 stderr。
+│  │  └─ 将 dist-mcp/index.mjs 配置为宿主的 Node stdio 服务。
+│  ├─ 可编辑示例：pnpm preview:mcp
+│  │  ├─ 打开命令输出的本地链接，选择示例树。
+│  │  └─ 示例不会自动执行；浏览器本身不是模型宿主。
+│  └─ 预览数据与真实宿主数据分别保存。
+├─ Codex 接入
+│  ├─ 插件包：plugins/arborun；构建命令会复制完整运行文件。
+│  ├─ 登记本地目录：codex plugin marketplace add /absolute/path/to/arborun
+│  ├─ 安装：codex plugin add arborun@arborun-local
+│  ├─ 按宿主要求刷新／重启后，在会话中启用 Arborun。
+│  ├─ 用法：使用 Arborun，把这个任务先规划为可编辑执行树，等我批准再执行。
+│  └─ 详细接入、官方依据和原生验收步骤：docs/mcp-hosts.md。
+├─ 核心约束
+│  ├─ 未批准或旧版本不得领取；模型工具没有 approve/accept 参数。
+│  ├─ 用户动作使用 app-only 工具与 UI capability；依赖宿主正确隔离界面和模型。
+│  ├─ 版本冲突拒绝保存，避免覆盖用户编辑。
+│  ├─ 修改撤销批准；失效范围传播到后代与依赖；迟到结果只进历史。
+│  ├─ 条件未知时阻塞；未触发分支保留原因。
+│  ├─ 独立节点可被不同 Agent 同时领取，同一节点不能重复领取。
+│  └─ 子 Agent 结果检查、任务提交与用户验收分别记录。
+├─ 能力边界
+│  ├─ 执行位置与证据来自 Agent 上报；首版未接入 Codex 全量工具 hooks。
+│  ├─ 不显示模型内部思维链；展示计划、可观察动作、检查和简明决定依据。
+│  ├─ MCP 无法禁止宿主绕过它操作文件，也无法撤销已发出的外部命令。
+│  ├─ 角色、权限与预算是批准约定；实际权限和调用预算由宿主控制。
+│  ├─ 批准后自动续跑依赖宿主消息能力；不支持时显示继续指令。
+│  ├─ 首版同一数据目录仅运行一个服务进程；不同宿主使用独立数据目录。
+│  └─ MCP 连接成功、浏览器测试通过，不等于原生侧栏已经验收。
+├─ 数据
+│  ├─ ARBORUN_MCP_DATA_DIR 指定数据目录，默认当前目录的 .arborun-mcp。
+│  ├─ 插件安装使用 PLUGIN_DATA/state，不将用户任务放进插件源码。
+│  ├─ 本地原子 JSON 快照，包含计划版本、执行记录、证据和验收状态。
+│  ├─ 保存失败不发布新状态，重启时暂停此前活跃执行以供核对。
+│  └─ 本地浏览器只监听 127.0.0.1，使用临时凭证及 Origin/Host 检查。
+├─ 验证命令
+│  ├─ pnpm typecheck
+│  ├─ pnpm test：原有引擎及新增 MCP 核心／传输测试。
+│  ├─ pnpm build:mcp && node scripts/check-mcp.mjs：打包产物真实 stdio 闭环。
+│  └─ pnpm test:mcp-ui：浏览器编辑、运行位置、失败重试、验收与并发修改测试。
+│     └─ 本机已有 Chrome 时可用 ARBORUN_TEST_BROWSER_CHANNEL=chrome。
+├─ 代码
+│  ├─ src/mcp：独立协议状态机、服务、持久化和 stdio 入口。
+│  ├─ src/mcp-ui：嵌入式单树界面与 MCP Apps 桥接。
+│  ├─ plugins/arborun：本地插件声明与宿主工作流 skill。
+│  └─ src/harness、src/desktop、src/renderer：保留的桌面原型。
+└─ 交付状态
+   ├─ 本地版本，未发布远程服务或 npm 包。
+   ├─ 具体测试和宿主实测状态见 docs/mcp-verification.md。
+   └─ 开源方向不变；许可证仍待选定，未自动创建公开 Release。
 ```

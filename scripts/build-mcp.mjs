@@ -1,0 +1,16 @@
+import { build } from 'esbuild';
+import { mkdir, writeFile, cp } from 'node:fs/promises';
+
+await mkdir('dist-mcp', { recursive: true });
+const ui = await build({ entryPoints: ['src/mcp-ui/main.tsx'], bundle: true, platform: 'browser', format: 'iife',
+  outfile: 'dist-mcp/tree.js', write: false, minify: true, define: { 'process.env.NODE_ENV': '"production"' }, target: 'es2022' });
+const js = ui.outputFiles.find(f => f.path.endsWith('.js')).text.replaceAll('</script', '<\\/script');
+const css = ui.outputFiles.find(f => f.path.endsWith('.css'))?.text ?? '';
+const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Arborun</title><style>${css}</style></head><body><div id="root"></div><script>${js}</script></body></html>`;
+await writeFile('dist-mcp/tree.html', html);
+await build({ entryPoints: ['src/mcp/index.ts'], bundle: true, platform: 'node', format: 'esm', target: 'node22',
+  outfile: 'dist-mcp/index.mjs', minify: false,
+  banner: { js: 'import { createRequire } from "node:module"; const require = createRequire(import.meta.url);' } });
+await mkdir('plugins/arborun/dist-mcp', { recursive: true });
+await cp('dist-mcp', 'plugins/arborun/dist-mcp', { recursive: true });
+console.log('Arborun MCP: dist-mcp/index.mjs + tree.html');
