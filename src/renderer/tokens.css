@@ -1,0 +1,12 @@
+:root {
+  --paper: #fcfcf8;
+  --sidebar: #f1f3eb;
+  --ink: #34432f;
+  --muted: #8c9980;
+  --green: #3c6138;
+  --green-soft: #e7efdf;
+  --line: #e2e7da;
+  --line-strong: #d4ddc9;
+  --font: 'Avenir Next', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
+  --mono: 'SFMono-Regular', 'Cascadia Code', 'Noto Sans Mono CJK SC', monospace;
+}
