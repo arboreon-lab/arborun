@@ -313,27 +313,29 @@ test('长任务：节点完成后，测试里每个样例显示实际结果与�
   await dismissNotice(page);
   await closeInspector(page);
 
-  const grant = await claimNode('a-clean');
+  const grant = await claimNode('d-scan');
   const report = await tool('arborun_report', {
     sessionId, attemptId: grant.attemptId, claimToken: grant.claimToken, eventId: randomUUID(), status: 'passed',
-    summary: '三份照片已分好', evidence: [], checks: [{ criterion: '生成三份清单和报告', passed: true, evidence: 'prepare.py 退出码 0' }],
+    summary: '每张照片都检查过了', evidence: [], checks: [{ criterion: '每张照片都有结论', passed: true, evidence: 'scan.py 退出码 0' }],
     caseResults: [
-      { case: 0, passed: true, actual: '分成 19987 / 2498 / 2499 张', proof: [{ kind: 'command', command: 'python data/prepare.py', output: 'train 19987 / val 2498 / test 2499' }] },
-      { case: 1, passed: true, actual: '只有 1 张的类别被提示数量太少', proof: [{ kind: 'image', path: resolve('plugins/arborun/assets/logo.png'), caption: '数据报告截图' }] },
-      { case: 2, passed: true, actual: '超大照片缩小后照常处理', proof: [{ kind: 'video', path: resolve('tests/fixtures/demo.webm'), caption: '处理过程录像' }] },
+      { case: 0, passed: true, actual: '24997 张能打开，3 张是坏图', proof: [{ kind: 'command', command: 'python data/scan.py', output: 'ok 24997 / broken 3' }] },
+      { case: 1, passed: true, actual: '空文件被记为坏图', proof: [{ kind: 'image', path: resolve('plugins/arborun/assets/logo.png'), caption: '坏图清单截图' }] },
+      { case: 2, passed: true, actual: '超大照片能打开，照常记录', proof: [{ kind: 'video', path: resolve('tests/fixtures/demo.webm'), caption: '检查过程录像' }] },
     ],
   });
   expect(report.isError, JSON.stringify(report.content)).not.toBe(true);
 
   await nodeButton(page, '照片整理干净').click();
   await inspector(page).getByText('Agent 要做的步骤').click();
-  await inspector(page).getByRole('button', { name: '检查并分好照片' }).click();
-  await expect(inspector(page)).toHaveAttribute('data-inspector-node', 'a-clean');
+  // The stage is broken into several small steps, not one.
+  await expect(inspector(page).locator('details.fold .link-chip')).toHaveCount(4);
+  await inspector(page).getByRole('button', { name: '清点并检查每张照片' }).click();
+  await expect(inspector(page)).toHaveAttribute('data-inspector-node', 'd-scan');
   const rows = inspector(page).locator('.cases > li');
   await expect(rows).toHaveCount(3);
   await expect(rows.nth(0)).toHaveAttribute('data-result', 'passed');
-  await expect(rows.nth(0)).toContainText('实际：分成 19987 / 2498 / 2499 张');
-  await expect(rows.nth(0).locator('.term')).toContainText('$ python data/prepare.py');
+  await expect(rows.nth(0)).toContainText('实际：24997 张能打开，3 张是坏图');
+  await expect(rows.nth(0).locator('.term')).toContainText('$ python data/scan.py');
   // The screenshot and the clip come from Arborun's own store, loaded through the panel's authorised channel.
   const image = rows.nth(1).locator('img.media');
   await expect(image).toBeVisible();

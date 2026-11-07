@@ -85,81 +85,6 @@
       "mapping": "逐张检查能否打开、找出重复，再按 8:1:1 随机分开，猫和狗的比例保持一致。"
     },
     {
-      "kind": "test",
-      "failure": "把没通过的地方和证据记下来，Agent 自己调整再试；试 3 次还不行就停下来告诉你原因。",
-      "dependsOn": [
-        "a-clean"
-      ],
-      "id": "t-split",
-      "parentId": "s-data",
-      "title": "三份照片互不重复",
-      "by": "user",
-      "action": "当对比三份照片清单时，应该看不到同一张照片出现在两份里。",
-      "target": "数据报告",
-      "input": "三份照片清单",
-      "acceptance": [
-        "三份之间没有重复照片",
-        "猫狗比例相差不超过 2%"
-      ],
-      "agentId": "data",
-      "output": "一张对比结果表",
-      "mapping": "按照片内容算指纹，两两比对三份清单。",
-      "cases": [
-        {
-          "kind": "normal",
-          "input": "正常的 2.5 万张",
-          "expected": "0 张重复"
-        },
-        {
-          "kind": "boundary",
-          "input": "同一张图存了两个名字",
-          "expected": "被认出是重复"
-        },
-        {
-          "kind": "extreme",
-          "input": "一张损坏打不开的图",
-          "expected": "被单独列出，不进任何一份"
-        }
-      ]
-    },
-    {
-      "kind": "action",
-      "failure": "把没通过的地方和证据记下来，Agent 自己调整再试；试 3 次还不行就停下来告诉你原因。",
-      "dependsOn": [],
-      "id": "a-clean",
-      "parentId": "s-data",
-      "title": "检查并分好照片",
-      "action": "写脚本检查照片、去重并分成三份",
-      "target": "data/prepare.py",
-      "input": "data/raw 下的原始照片",
-      "acceptance": [
-        "生成三份清单和报告"
-      ],
-      "agentId": "data",
-      "output": "train / val / test 三份清单",
-      "mapping": "打不开的照片和重复照片先挑出来，剩下的按 8:1:1 分。",
-      "constraints": [
-        "原始照片不改不删"
-      ],
-      "cases": [
-        {
-          "kind": "normal",
-          "input": "2.5 万张照片",
-          "expected": "约 2 万 / 2500 / 2500 张"
-        },
-        {
-          "kind": "boundary",
-          "input": "某类只有 1 张",
-          "expected": "提示数量太少"
-        },
-        {
-          "kind": "extreme",
-          "input": "一张 50MB 的超大照片",
-          "expected": "缩小后照常处理"
-        }
-      ]
-    },
-    {
       "id": "s-base",
       "parentId": "root",
       "kind": "result",
@@ -173,82 +98,6 @@
       "agentId": "main",
       "output": "第一个模型文件和它的成绩",
       "mapping": "用现成的小网络先训一版，确认整套流程能跑通，作为后面改进的起点。"
-    },
-    {
-      "kind": "test",
-      "failure": "把没通过的地方和证据记下来，Agent 自己调整再试；试 3 次还不行就停下来告诉你原因。",
-      "dependsOn": [
-        "a-base"
-      ],
-      "id": "t-base-acc",
-      "parentId": "s-base",
-      "title": "检查集准确率过 85%",
-      "by": "agent",
-      "action": "当用检查集评估第一个模型时，应该看到准确率超过 85%。",
-      "target": "评估脚本输出",
-      "input": "检查集 2500 张",
-      "acceptance": [
-        "准确率超过 85%"
-      ],
-      "agentId": "train",
-      "output": "准确率数字和训练曲线",
-      "mapping": "跑评估脚本，看准确率和训练过程的曲线是否正常下降。",
-      "cases": [
-        {
-          "kind": "normal",
-          "input": "检查集全部 2500 张",
-          "expected": "准确率 > 85%"
-        },
-        {
-          "kind": "boundary",
-          "input": "只看最难分的 100 张",
-          "expected": "准确率 > 60%"
-        },
-        {
-          "kind": "extreme",
-          "input": "全黑和全白的图片",
-          "expected": "不报错，给出低把握的结果"
-        }
-      ]
-    },
-    {
-      "kind": "action",
-      "failure": "把没通过的地方和证据记下来，Agent 自己调整再试；试 3 次还不行就停下来告诉你原因。",
-      "dependsOn": [
-        "a-clean"
-      ],
-      "id": "a-base",
-      "parentId": "s-base",
-      "title": "训练第一版",
-      "action": "用小网络训练 5 轮",
-      "target": "train/baseline.py",
-      "input": "训练集和检查集",
-      "acceptance": [
-        "训练完成并保存模型"
-      ],
-      "agentId": "train",
-      "output": "baseline.pt 模型文件",
-      "mapping": "加载预训练小网络，只换最后一层，训 5 轮。",
-      "constraints": [
-        "单次训练不超过 2 小时"
-      ],
-      "cases": [
-        {
-          "kind": "normal",
-          "input": "2 万张训练照片",
-          "expected": "5 轮内训完并保存模型"
-        },
-        {
-          "kind": "boundary",
-          "input": "只用 100 张照片试跑",
-          "expected": "几分钟内跑通，不报错"
-        },
-        {
-          "kind": "extreme",
-          "input": "显存只剩一半",
-          "expected": "自动减小每批数量继续训练"
-        }
-      ]
     },
     {
       "id": "s-good",
@@ -269,82 +118,6 @@
       ]
     },
     {
-      "kind": "test",
-      "failure": "把没通过的地方和证据记下来，Agent 自己调整再试；试 3 次还不行就停下来告诉你原因。",
-      "dependsOn": [
-        "a-tune"
-      ],
-      "id": "t-final",
-      "parentId": "s-good",
-      "title": "测试集准确率不低于 95%",
-      "by": "user",
-      "action": "当用从没参与训练的测试集评估时，应该看到准确率不低于 95%。",
-      "target": "评估脚本输出",
-      "input": "测试集 2500 张",
-      "acceptance": [
-        "准确率 ≥ 95%"
-      ],
-      "agentId": "train",
-      "output": "准确率和分错照片的示例",
-      "mapping": "只在最终模型上跑一次测试集，并把分错的照片列出来看。",
-      "cases": [
-        {
-          "kind": "normal",
-          "input": "测试集全部 2500 张",
-          "expected": "准确率 ≥ 95%"
-        },
-        {
-          "kind": "boundary",
-          "input": "猫狗都在的照片",
-          "expected": "说出把握更大的那个"
-        },
-        {
-          "kind": "extreme",
-          "input": "一张画出来的卡通猫",
-          "expected": "仍判断为猫"
-        }
-      ]
-    },
-    {
-      "kind": "action",
-      "failure": "把没通过的地方和证据记下来，Agent 自己调整再试；试 3 次还不行就停下来告诉你原因。",
-      "dependsOn": [
-        "a-base"
-      ],
-      "id": "a-tune",
-      "parentId": "s-good",
-      "title": "改进模型",
-      "action": "逐项尝试改进并记录每次效果",
-      "target": "train/",
-      "input": "第一版模型和成绩",
-      "acceptance": [
-        "检查集准确率 ≥ 96%"
-      ],
-      "agentId": "train",
-      "output": "最终模型 final.pt",
-      "mapping": "每次只改一处（网络大小、数据增强、学习率），留下效果最好的。",
-      "constraints": [
-        "总训练时间不超过 20 小时"
-      ],
-      "cases": [
-        {
-          "kind": "normal",
-          "input": "换大一点的网络",
-          "expected": "检查集准确率提高"
-        },
-        {
-          "kind": "boundary",
-          "input": "改动后准确率没变化",
-          "expected": "记录下来，换下一个改法"
-        },
-        {
-          "kind": "extreme",
-          "input": "训练中途断电",
-          "expected": "从最近保存的位置接着训"
-        }
-      ]
-    },
-    {
       "id": "s-demo",
       "parentId": "root",
       "kind": "result",
@@ -360,15 +133,890 @@
       "mapping": "做一个只有上传区的网页，后台调用模型，显示结果和把握程度。"
     },
     {
-      "kind": "test",
+      "id": "d-scan",
+      "parentId": "s-data",
+      "kind": "action",
+      "title": "清点并检查每张照片",
+      "action": "清点并检查每张照片",
+      "target": "data/scan.py",
+      "input": "data/raw 下的原始照片",
+      "acceptance": [
+        "每张照片都有结论"
+      ],
+      "failure": "把没通过的地方和证据记下来，Agent 自己调整再试；试 3 次还不行就停下来告诉你原因。",
+      "dependsOn": [],
+      "agentId": "data",
+      "output": "能打开的照片清单和坏图清单",
+      "mapping": "逐张尝试打开，打不开或不是图片的记进坏图清单。",
+      "cases": [
+        {
+          "kind": "normal",
+          "input": "2.5 万张照片",
+          "expected": "全部有结论"
+        },
+        {
+          "kind": "boundary",
+          "input": "0 字节的空文件",
+          "expected": "记为坏图"
+        },
+        {
+          "kind": "extreme",
+          "input": "一张 50MB 的超大照片",
+          "expected": "能打开，照常记录"
+        }
+      ],
+      "constraints": [
+        "原始照片不改不删"
+      ]
+    },
+    {
+      "id": "d-dedup",
+      "parentId": "s-data",
+      "kind": "action",
+      "title": "找出重复照片",
+      "action": "找出重复照片",
+      "target": "data/dedup.py",
+      "input": "能打开的照片清单",
+      "acceptance": [
+        "重复照片只保留一张"
+      ],
       "failure": "把没通过的地方和证据记下来，Agent 自己调整再试；试 3 次还不行就停下来告诉你原因。",
       "dependsOn": [
-        "a-demo"
+        "d-scan"
       ],
+      "agentId": "data",
+      "output": "去重后的清单和重复照片表",
+      "mapping": "按照片内容算指纹，内容一样的只留一张。",
+      "cases": [
+        {
+          "kind": "normal",
+          "input": "2.5 万张照片",
+          "expected": "列出所有重复组"
+        },
+        {
+          "kind": "boundary",
+          "input": "同一张图改了名字",
+          "expected": "认作重复"
+        },
+        {
+          "kind": "extreme",
+          "input": "只差一个像素的两张图",
+          "expected": "不认作重复"
+        }
+      ]
+    },
+    {
+      "id": "d-split",
+      "parentId": "s-data",
+      "kind": "action",
+      "title": "分成训练、检查、测试三份",
+      "action": "分成训练、检查、测试三份",
+      "target": "data/split.py",
+      "input": "去重后的清单",
+      "acceptance": [
+        "三份数量约 8:1:1",
+        "猫狗比例一致"
+      ],
+      "failure": "把没通过的地方和证据记下来，Agent 自己调整再试；试 3 次还不行就停下来告诉你原因。",
+      "dependsOn": [
+        "d-dedup"
+      ],
+      "agentId": "data",
+      "output": "三份照片清单",
+      "mapping": "按 8:1:1 随机分开，猫和狗在每份里的比例保持一样。",
+      "cases": [
+        {
+          "kind": "normal",
+          "input": "约 2.4 万张",
+          "expected": "约 1.9 万 / 2400 / 2400 张"
+        },
+        {
+          "kind": "boundary",
+          "input": "某一类只剩 1 张",
+          "expected": "提示数量太少，不继续分"
+        },
+        {
+          "kind": "extreme",
+          "input": "再运行一次",
+          "expected": "分出的结果完全一样"
+        }
+      ]
+    },
+    {
+      "id": "d-report",
+      "parentId": "s-data",
+      "kind": "action",
+      "title": "写一份数据报告",
+      "action": "写一份数据报告",
+      "target": "data/report.md",
+      "input": "三份清单、坏图和重复表",
+      "acceptance": [
+        "报告包含数量、比例、坏图、重复"
+      ],
+      "failure": "把没通过的地方和证据记下来，Agent 自己调整再试；试 3 次还不行就停下来告诉你原因。",
+      "dependsOn": [
+        "d-split"
+      ],
+      "agentId": "data",
+      "output": "data/report.md",
+      "mapping": "把数量、比例、坏图和重复情况写成一页报告，附几张样例照片。",
+      "cases": [
+        {
+          "kind": "normal",
+          "input": "正常的三份清单",
+          "expected": "报告完整"
+        },
+        {
+          "kind": "boundary",
+          "input": "没有坏图",
+          "expected": "报告写“无坏图”"
+        },
+        {
+          "kind": "extreme",
+          "input": "坏图超过 1000 张",
+          "expected": "报告醒目提示，需要你看一下"
+        }
+      ]
+    },
+    {
+      "id": "t-split",
+      "parentId": "s-data",
+      "kind": "test",
+      "by": "user",
+      "title": "三份照片互不重复",
+      "action": "当对比三份照片清单时，应该看不到同一张照片出现在两份里。",
+      "target": "数据报告",
+      "input": "三份照片清单",
+      "acceptance": [
+        "三份之间没有重复照片",
+        "猫狗比例相差不超过 2%"
+      ],
+      "failure": "把没通过的地方和证据记下来，Agent 自己调整再试；试 3 次还不行就停下来告诉你原因。",
+      "dependsOn": [
+        "d-report"
+      ],
+      "agentId": "data",
+      "output": "一张对比结果表",
+      "mapping": "按照片指纹两两比对三份清单。",
+      "cases": [
+        {
+          "kind": "normal",
+          "input": "正常的三份清单",
+          "expected": "0 张重复"
+        },
+        {
+          "kind": "boundary",
+          "input": "同一张图存了两个名字",
+          "expected": "只出现在一份里"
+        },
+        {
+          "kind": "extreme",
+          "input": "一张损坏打不开的图",
+          "expected": "不在任何一份里"
+        }
+      ]
+    },
+    {
+      "id": "t-broken",
+      "parentId": "s-data",
+      "kind": "test",
+      "by": "agent",
+      "title": "坏图都被挑出来",
+      "action": "当查看坏图清单时，应该看到所有打不开的照片都在里面。",
+      "target": "data/broken.txt",
+      "input": "坏图清单和原始照片",
+      "acceptance": [
+        "放入的坏图全部被挑出"
+      ],
+      "failure": "把没通过的地方和证据记下来，Agent 自己调整再试；试 3 次还不行就停下来告诉你原因。",
+      "dependsOn": [
+        "d-report"
+      ],
+      "agentId": "data",
+      "output": "坏图清单核对结果",
+      "mapping": "故意放入几张坏图，看是否都被挑出。",
+      "cases": [
+        {
+          "kind": "normal",
+          "input": "放入 5 张坏图",
+          "expected": "5 张都在清单里"
+        },
+        {
+          "kind": "boundary",
+          "input": "放入一张只坏了一半的图",
+          "expected": "也在清单里"
+        },
+        {
+          "kind": "extreme",
+          "input": "放入一个改了后缀的文本文件",
+          "expected": "也在清单里"
+        }
+      ]
+    },
+    {
+      "id": "b-code",
+      "parentId": "s-base",
+      "kind": "action",
+      "title": "搭好训练代码",
+      "action": "搭好训练代码",
+      "target": "train/train.py",
+      "input": "三份照片清单",
+      "acceptance": [
+        "程序能启动"
+      ],
+      "failure": "把没通过的地方和证据记下来，Agent 自己调整再试；试 3 次还不行就停下来告诉你原因。",
+      "dependsOn": [
+        "d-split"
+      ],
+      "agentId": "train",
+      "output": "train/train.py 训练程序",
+      "mapping": "写读取照片、训练、保存模型的程序，参数都放在一个配置文件里。",
+      "cases": [
+        {
+          "kind": "normal",
+          "input": "默认配置",
+          "expected": "程序正常启动"
+        },
+        {
+          "kind": "boundary",
+          "input": "配置里少一项",
+          "expected": "报出缺哪一项"
+        },
+        {
+          "kind": "extreme",
+          "input": "照片路径写错",
+          "expected": "提示路径不存在，不崩溃"
+        }
+      ]
+    },
+    {
+      "id": "b-smoke",
+      "parentId": "s-base",
+      "kind": "action",
+      "title": "用 100 张照片试跑",
+      "action": "用 100 张照片试跑",
+      "target": "train/train.py --small",
+      "input": "训练程序和 100 张照片",
+      "acceptance": [
+        "试跑完成且损失下降"
+      ],
+      "failure": "把没通过的地方和证据记下来，Agent 自己调整再试；试 3 次还不行就停下来告诉你原因。",
+      "dependsOn": [
+        "b-code"
+      ],
+      "agentId": "train",
+      "output": "一次几分钟的试跑记录",
+      "mapping": "先用很少的照片跑通全流程，确认损失会下降。",
+      "cases": [
+        {
+          "kind": "normal",
+          "input": "100 张照片跑 1 轮",
+          "expected": "几分钟内跑完"
+        },
+        {
+          "kind": "boundary",
+          "input": "只给 2 张照片",
+          "expected": "能跑完，不报错"
+        },
+        {
+          "kind": "extreme",
+          "input": "显存只给一半",
+          "expected": "自动减小每批数量"
+        }
+      ]
+    },
+    {
+      "id": "b-train",
+      "parentId": "s-base",
+      "kind": "action",
+      "title": "训练第一版模型",
+      "action": "训练第一版模型",
+      "target": "train/baseline.py",
+      "input": "训练集和检查集",
+      "acceptance": [
+        "训练完成并保存模型"
+      ],
+      "failure": "把没通过的地方和证据记下来，Agent 自己调整再试；试 3 次还不行就停下来告诉你原因。",
+      "dependsOn": [
+        "b-smoke"
+      ],
+      "agentId": "train",
+      "output": "baseline.pt 模型和训练曲线",
+      "mapping": "用预训练小网络，只换最后一层，训练 5 轮，每轮保存一次。",
+      "cases": [
+        {
+          "kind": "normal",
+          "input": "完整训练集训 5 轮",
+          "expected": "2 小时内训完"
+        },
+        {
+          "kind": "boundary",
+          "input": "第 3 轮中途停掉",
+          "expected": "能从第 2 轮接着训"
+        },
+        {
+          "kind": "extreme",
+          "input": "磁盘只剩 1GB",
+          "expected": "提前提示空间不够"
+        }
+      ],
+      "constraints": [
+        "单次训练不超过 2 小时"
+      ]
+    },
+    {
+      "id": "b-eval",
+      "parentId": "s-base",
+      "kind": "action",
+      "title": "评估第一版",
+      "action": "评估第一版",
+      "target": "train/eval.py",
+      "input": "baseline.pt 和检查集",
+      "acceptance": [
+        "得到准确率和分错清单"
+      ],
+      "failure": "把没通过的地方和证据记下来，Agent 自己调整再试；试 3 次还不行就停下来告诉你原因。",
+      "dependsOn": [
+        "b-train"
+      ],
+      "agentId": "train",
+      "output": "准确率和分错照片清单",
+      "mapping": "用检查集算准确率，列出分错的照片。",
+      "cases": [
+        {
+          "kind": "normal",
+          "input": "检查集 2400 张",
+          "expected": "给出准确率"
+        },
+        {
+          "kind": "boundary",
+          "input": "只有 1 张照片",
+          "expected": "也能给出结果"
+        },
+        {
+          "kind": "extreme",
+          "input": "全部是同一类",
+          "expected": "如实给出准确率"
+        }
+      ]
+    },
+    {
+      "id": "t-base-acc",
+      "parentId": "s-base",
+      "kind": "test",
+      "by": "agent",
+      "title": "检查集准确率过 85%",
+      "action": "当用检查集评估第一个模型时，应该看到准确率超过 85%。",
+      "target": "评估输出",
+      "input": "检查集 2400 张",
+      "acceptance": [
+        "准确率超过 85%"
+      ],
+      "failure": "把没通过的地方和证据记下来，Agent 自己调整再试；试 3 次还不行就停下来告诉你原因。",
+      "dependsOn": [
+        "b-eval"
+      ],
+      "agentId": "train",
+      "output": "准确率数字",
+      "mapping": "跑评估程序，看准确率。",
+      "cases": [
+        {
+          "kind": "normal",
+          "input": "检查集全部",
+          "expected": "准确率 > 85%"
+        },
+        {
+          "kind": "boundary",
+          "input": "最难分的 100 张",
+          "expected": "准确率 > 60%"
+        },
+        {
+          "kind": "extreme",
+          "input": "全黑和全白图片",
+          "expected": "不报错，把握很低"
+        }
+      ]
+    },
+    {
+      "id": "t-curve",
+      "parentId": "s-base",
+      "kind": "test",
+      "by": "agent",
+      "title": "训练过程正常",
+      "action": "当查看训练曲线时，应该看到损失一路下降、没有突然变大。",
+      "target": "训练曲线",
+      "input": "训练记录",
+      "acceptance": [
+        "损失持续下降"
+      ],
+      "failure": "把没通过的地方和证据记下来，Agent 自己调整再试；试 3 次还不行就停下来告诉你原因。",
+      "dependsOn": [
+        "b-train"
+      ],
+      "agentId": "train",
+      "output": "训练曲线截图",
+      "mapping": "把每轮的损失和准确率画成曲线。",
+      "cases": [
+        {
+          "kind": "normal",
+          "input": "5 轮训练记录",
+          "expected": "曲线平稳下降"
+        },
+        {
+          "kind": "boundary",
+          "input": "只有 1 轮",
+          "expected": "也能画出一个点"
+        },
+        {
+          "kind": "extreme",
+          "input": "中途重启过",
+          "expected": "曲线连续不断开"
+        }
+      ]
+    },
+    {
+      "id": "g-errors",
+      "parentId": "s-good",
+      "kind": "action",
+      "title": "看分错的照片找原因",
+      "action": "看分错的照片找原因",
+      "target": "train/errors.md",
+      "input": "第一版分错的照片",
+      "acceptance": [
+        "每张分错照片都有归类"
+      ],
+      "failure": "把没通过的地方和证据记下来，Agent 自己调整再试；试 3 次还不行就停下来告诉你原因。",
+      "dependsOn": [
+        "b-eval"
+      ],
+      "agentId": "train",
+      "output": "分错原因归类表",
+      "mapping": "把分错的照片按原因归类，比如太暗、太小、有遮挡。",
+      "cases": [
+        {
+          "kind": "normal",
+          "input": "200 张分错照片",
+          "expected": "每张都有归类"
+        },
+        {
+          "kind": "boundary",
+          "input": "只有 1 张分错",
+          "expected": "也写清原因"
+        },
+        {
+          "kind": "extreme",
+          "input": "原因看不出来",
+          "expected": "归为“未知”并附图"
+        }
+      ]
+    },
+    {
+      "id": "g-aug",
+      "parentId": "s-good",
+      "kind": "action",
+      "title": "第 1 轮：加数据增强",
+      "action": "第 1 轮：加数据增强",
+      "target": "train/configs/aug.yaml",
+      "input": "分错原因表和第一版模型",
+      "acceptance": [
+        "和第一版比有准确率记录"
+      ],
+      "failure": "把没通过的地方和证据记下来，Agent 自己调整再试；试 3 次还不行就停下来告诉你原因。",
+      "dependsOn": [
+        "g-errors"
+      ],
+      "agentId": "train",
+      "output": "加增强后的模型和准确率",
+      "mapping": "针对太暗、太小的问题，训练时随机调亮度、裁剪、翻转。",
+      "cases": [
+        {
+          "kind": "normal",
+          "input": "加亮度和翻转",
+          "expected": "检查集准确率提高"
+        },
+        {
+          "kind": "boundary",
+          "input": "增强幅度调到最大",
+          "expected": "记录准确率是否下降"
+        },
+        {
+          "kind": "extreme",
+          "input": "增强后照片全黑",
+          "expected": "自动丢弃并提示"
+        }
+      ]
+    },
+    {
+      "id": "g-net",
+      "parentId": "s-good",
+      "kind": "action",
+      "title": "第 2 轮：换大一点的网络",
+      "action": "第 2 轮：换大一点的网络",
+      "target": "train/configs/net.yaml",
+      "input": "第 1 轮的设置",
+      "acceptance": [
+        "和上一轮比有准确率记录"
+      ],
+      "failure": "把没通过的地方和证据记下来，Agent 自己调整再试；试 3 次还不行就停下来告诉你原因。",
+      "dependsOn": [
+        "g-aug"
+      ],
+      "agentId": "train",
+      "output": "大网络模型和准确率",
+      "mapping": "只换网络大小，其他不变，比较准确率和速度。",
+      "cases": [
+        {
+          "kind": "normal",
+          "input": "换中等网络",
+          "expected": "准确率提高"
+        },
+        {
+          "kind": "boundary",
+          "input": "显存刚好够",
+          "expected": "能训完"
+        },
+        {
+          "kind": "extreme",
+          "input": "显存不够",
+          "expected": "自动换小一号并提示"
+        }
+      ]
+    },
+    {
+      "id": "g-lr",
+      "parentId": "s-good",
+      "kind": "action",
+      "title": "第 3 轮：调学习速度",
+      "action": "第 3 轮：调学习速度",
+      "target": "train/configs/lr.yaml",
+      "input": "第 2 轮的设置",
+      "acceptance": [
+        "三组都有结果"
+      ],
+      "failure": "把没通过的地方和证据记下来，Agent 自己调整再试；试 3 次还不行就停下来告诉你原因。",
+      "dependsOn": [
+        "g-net"
+      ],
+      "agentId": "train",
+      "output": "三组学习速度的对比表",
+      "mapping": "试三种学习速度，各训一遍，留下最好的。",
+      "cases": [
+        {
+          "kind": "normal",
+          "input": "三种常见速度",
+          "expected": "选出最好的一种"
+        },
+        {
+          "kind": "boundary",
+          "input": "速度很小",
+          "expected": "训得慢但不出错"
+        },
+        {
+          "kind": "extreme",
+          "input": "速度很大",
+          "expected": "发现损失变大并停下"
+        }
+      ]
+    },
+    {
+      "id": "g-pick",
+      "parentId": "s-good",
+      "kind": "action",
+      "title": "选出最好的一版",
+      "action": "选出最好的一版",
+      "target": "train/compare.md",
+      "input": "三轮的全部记录",
+      "acceptance": [
+        "对比表覆盖每一轮"
+      ],
+      "failure": "把没通过的地方和证据记下来，Agent 自己调整再试；试 3 次还不行就停下来告诉你原因。",
+      "dependsOn": [
+        "g-lr"
+      ],
+      "agentId": "train",
+      "output": "final.pt 和一张对比表",
+      "mapping": "按检查集准确率选出最好的模型，表里写清每轮改了什么、提高了多少。",
+      "cases": [
+        {
+          "kind": "normal",
+          "input": "三轮记录",
+          "expected": "选出准确率最高的"
+        },
+        {
+          "kind": "boundary",
+          "input": "两轮一样好",
+          "expected": "选更快的那个"
+        },
+        {
+          "kind": "extreme",
+          "input": "最好的一轮没过 96%",
+          "expected": "停下来告诉你，不进入测试"
+        }
+      ]
+    },
+    {
+      "id": "g-test",
+      "parentId": "s-good",
+      "kind": "action",
+      "title": "用测试集最终评估",
+      "action": "用测试集最终评估",
+      "target": "train/eval.py --split test",
+      "input": "final.pt 和测试集",
+      "acceptance": [
+        "得到测试准确率"
+      ],
+      "failure": "把没通过的地方和证据记下来，Agent 自己调整再试；试 3 次还不行就停下来告诉你原因。",
+      "dependsOn": [
+        "g-pick"
+      ],
+      "agentId": "train",
+      "output": "测试准确率和分错示例",
+      "mapping": "只在最终模型上用一次测试集，算准确率并列出分错的照片。",
+      "cases": [
+        {
+          "kind": "normal",
+          "input": "测试集 2400 张",
+          "expected": "给出准确率"
+        },
+        {
+          "kind": "boundary",
+          "input": "测试集里有坏图",
+          "expected": "跳过坏图并说明"
+        },
+        {
+          "kind": "extreme",
+          "input": "再评估一次",
+          "expected": "结果完全一样"
+        }
+      ],
+      "constraints": [
+        "测试集只用这一次"
+      ]
+    },
+    {
+      "id": "t-final",
+      "parentId": "s-good",
+      "kind": "test",
+      "by": "user",
+      "title": "测试集准确率不低于 95%",
+      "action": "当用从没参与训练的测试集评估时，应该看到准确率不低于 95%。",
+      "target": "评估输出",
+      "input": "测试集 2400 张",
+      "acceptance": [
+        "准确率 ≥ 95%"
+      ],
+      "failure": "把没通过的地方和证据记下来，Agent 自己调整再试；试 3 次还不行就停下来告诉你原因。",
+      "dependsOn": [
+        "g-test"
+      ],
+      "agentId": "train",
+      "output": "准确率和分错照片示例",
+      "mapping": "只看最终模型在测试集上的成绩。",
+      "cases": [
+        {
+          "kind": "normal",
+          "input": "测试集全部",
+          "expected": "准确率 ≥ 95%"
+        },
+        {
+          "kind": "boundary",
+          "input": "猫狗都在的照片",
+          "expected": "说出把握更大的那个"
+        },
+        {
+          "kind": "extreme",
+          "input": "一张画出来的卡通猫",
+          "expected": "仍判断为猫"
+        }
+      ]
+    },
+    {
+      "id": "t-log",
+      "parentId": "s-good",
+      "kind": "test",
+      "by": "agent",
+      "title": "每次改动都有记录",
+      "action": "当打开对比表时，应该看到每一轮改了什么、准确率变化多少。",
+      "target": "train/compare.md",
+      "input": "train/compare.md",
+      "acceptance": [
+        "每轮都有改动和准确率"
+      ],
+      "failure": "把没通过的地方和证据记下来，Agent 自己调整再试；试 3 次还不行就停下来告诉你原因。",
+      "dependsOn": [
+        "g-pick"
+      ],
+      "agentId": "main",
+      "output": "对比表截图",
+      "mapping": "对照每一轮的设置和结果，看表里是否都有。",
+      "cases": [
+        {
+          "kind": "normal",
+          "input": "三轮改动",
+          "expected": "三行记录"
+        },
+        {
+          "kind": "boundary",
+          "input": "某轮准确率下降",
+          "expected": "也如实记下"
+        },
+        {
+          "kind": "extreme",
+          "input": "某轮中途失败",
+          "expected": "记下失败原因"
+        }
+      ]
+    },
+    {
+      "id": "w-export",
+      "parentId": "s-demo",
+      "kind": "action",
+      "title": "把模型存成网页能用的格式",
+      "action": "把模型存成网页能用的格式",
+      "target": "demo/export.py",
+      "input": "final.pt",
+      "acceptance": [
+        "转换后结果和原模型一致"
+      ],
+      "failure": "把没通过的地方和证据记下来，Agent 自己调整再试；试 3 次还不行就停下来告诉你原因。",
+      "dependsOn": [
+        "g-test"
+      ],
+      "agentId": "demo",
+      "output": "model.onnx",
+      "mapping": "把训练好的模型转换成网页后台能直接加载的文件，并核对转换前后结果一致。",
+      "cases": [
+        {
+          "kind": "normal",
+          "input": "final.pt",
+          "expected": "得到 model.onnx"
+        },
+        {
+          "kind": "boundary",
+          "input": "一张照片在两种格式下",
+          "expected": "结果相同"
+        },
+        {
+          "kind": "extreme",
+          "input": "模型文件损坏",
+          "expected": "提示无法转换"
+        }
+      ]
+    },
+    {
+      "id": "w-api",
+      "parentId": "s-demo",
+      "kind": "action",
+      "title": "写识别照片的后台",
+      "action": "写识别照片的后台",
+      "target": "demo/app.py",
+      "input": "model.onnx",
+      "acceptance": [
+        "本地服务能返回结果"
+      ],
+      "failure": "把没通过的地方和证据记下来，Agent 自己调整再试；试 3 次还不行就停下来告诉你原因。",
+      "dependsOn": [
+        "w-export"
+      ],
+      "agentId": "demo",
+      "output": "一个收照片、回结果的本地服务",
+      "mapping": "收到照片后缩放、交给模型，返回“猫”或“狗”和把握程度。",
+      "cases": [
+        {
+          "kind": "normal",
+          "input": "一张猫照片",
+          "expected": "返回“猫”"
+        },
+        {
+          "kind": "boundary",
+          "input": "32×32 的小照片",
+          "expected": "照常返回"
+        },
+        {
+          "kind": "extreme",
+          "input": "不是图片的文件",
+          "expected": "返回“请换一张照片”"
+        }
+      ]
+    },
+    {
+      "id": "w-page",
+      "parentId": "s-demo",
+      "kind": "action",
+      "title": "写拖放照片的网页",
+      "action": "写拖放照片的网页",
+      "target": "demo/index.html",
+      "input": "本地服务",
+      "acceptance": [
+        "拖入照片能看到结果"
+      ],
+      "failure": "把没通过的地方和证据记下来，Agent 自己调整再试；试 3 次还不行就停下来告诉你原因。",
+      "dependsOn": [
+        "w-api"
+      ],
+      "agentId": "demo",
+      "output": "demo/index.html",
+      "mapping": "一个只有拖放区的页面，拖入后显示结果和把握程度。",
+      "cases": [
+        {
+          "kind": "normal",
+          "input": "拖入一张照片",
+          "expected": "显示结果"
+        },
+        {
+          "kind": "boundary",
+          "input": "一次拖入两张",
+          "expected": "逐张显示"
+        },
+        {
+          "kind": "extreme",
+          "input": "拖入 200MB 的文件",
+          "expected": "提示文件太大"
+        }
+      ]
+    },
+    {
+      "id": "w-record",
+      "parentId": "s-demo",
+      "kind": "action",
+      "title": "录一段演示",
+      "action": "录一段演示",
+      "target": "demo/demo.webm",
+      "input": "网页和几张新照片",
+      "acceptance": [
+        "录像能看清每次结果"
+      ],
+      "failure": "把没通过的地方和证据记下来，Agent 自己调整再试；试 3 次还不行就停下来告诉你原因。",
+      "dependsOn": [
+        "w-page"
+      ],
+      "agentId": "demo",
+      "output": "30 秒内的演示录像",
+      "mapping": "打开网页，依次拖入几张照片，录下整个过程。",
+      "cases": [
+        {
+          "kind": "normal",
+          "input": "3 张新照片",
+          "expected": "录像里结果都清楚"
+        },
+        {
+          "kind": "boundary",
+          "input": "网速很慢时",
+          "expected": "录像里也能看到结果"
+        },
+        {
+          "kind": "extreme",
+          "input": "录像超过 1 分钟",
+          "expected": "剪到 30 秒内"
+        }
+      ]
+    },
+    {
       "id": "t-demo",
       "parentId": "s-demo",
-      "title": "拖入照片显示结果",
+      "kind": "test",
       "by": "user",
+      "title": "拖入照片显示结果",
       "action": "当把一张照片拖进网页时，应该在 1 秒内看到“猫”或“狗”。",
       "target": "http://localhost:8000",
       "input": "几张没见过的照片",
@@ -376,9 +1024,13 @@
         "1 秒内显示结果",
         "结果正确"
       ],
+      "failure": "把没通过的地方和证据记下来，Agent 自己调整再试；试 3 次还不行就停下来告诉你原因。",
+      "dependsOn": [
+        "w-record"
+      ],
       "agentId": "demo",
       "output": "演示录像",
-      "mapping": "打开网页，依次拖入几张照片，录下整个过程。",
+      "mapping": "打开网页依次拖入照片并录下来。",
       "cases": [
         {
           "kind": "normal",
@@ -394,42 +1046,6 @@
           "kind": "extreme",
           "input": "一个不是图片的文件",
           "expected": "提示“请换一张照片”"
-        }
-      ]
-    },
-    {
-      "kind": "action",
-      "failure": "把没通过的地方和证据记下来，Agent 自己调整再试；试 3 次还不行就停下来告诉你原因。",
-      "dependsOn": [
-        "a-tune"
-      ],
-      "id": "a-demo",
-      "parentId": "s-demo",
-      "title": "做试用网页",
-      "action": "写一个本地网页调用最终模型",
-      "target": "demo/app.py",
-      "input": "最终模型 final.pt",
-      "acceptance": [
-        "网页能打开并给出结果"
-      ],
-      "agentId": "demo",
-      "output": "demo/app.py 网页",
-      "mapping": "网页收到照片后交给模型，把结果和把握程度显示出来。",
-      "cases": [
-        {
-          "kind": "normal",
-          "input": "拖入一张猫照片",
-          "expected": "显示“猫”和把握程度"
-        },
-        {
-          "kind": "boundary",
-          "input": "同时拖入两张照片",
-          "expected": "逐张显示结果"
-        },
-        {
-          "kind": "extreme",
-          "input": "拖入一个 200MB 的文件",
-          "expected": "提示文件太大"
         }
       ]
     }

@@ -130,6 +130,16 @@ export function planGaps(nodes: NodeSpec[]): string[] {
   });
 }
 
+/** Stages that look too coarse for long work: an outcome produced by a single step. */
+export function coarseStages(nodes: NodeSpec[]): string[] {
+  return nodes.filter(n => n.kind === 'result').flatMap(result => {
+    const ids = new Set([result.id]);
+    for (let grew = true; grew;) { grew = false; for (const n of nodes) if (n.parentId && ids.has(n.parentId) && !ids.has(n.id)) { ids.add(n.id); grew = true; } }
+    const steps = nodes.filter(n => ids.has(n.id) && n.kind === 'action').length;
+    return steps < 2 ? [`「${result.title}」（${result.id}）只有 ${steps} 个步骤`] : [];
+  });
+}
+
 export class ArborunService {
   private state: ArborunSnapshot;
   constructor(snapshot?: ArborunSnapshot, options: { recover?: boolean } = {}) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ArborunService, planGaps } from '../src/mcp/core';
+import { ArborunService, coarseStages, planGaps } from '../src/mcp/core';
 import type { NodeSpec, ProposeInput } from '../src/mcp/schema';
 
 const agents = [
@@ -112,5 +112,9 @@ describe('以效果为中心的计划', () => {
     const { readFile } = await import('node:fs/promises');
     const model = JSON.parse(await readFile('examples/mcp-model-plan.json', 'utf8'));
     expect(planGaps(model.nodes)).toEqual([]);
+    // A long task is broken into many small steps; a stage done in one step is flagged as possibly too coarse.
+    expect(model.nodes.filter((n: NodeSpec) => n.kind === 'action').length).toBeGreaterThanOrEqual(15);
+    expect(coarseStages(model.nodes)).toEqual([]);
+    expect(coarseStages(plan().nodes as NodeSpec[])).toEqual(['「中文直接打开不乱码」（r-zh）只有 1 个步骤']);
   });
 });
