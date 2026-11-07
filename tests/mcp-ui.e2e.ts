@@ -257,7 +257,7 @@ test('节点菜单编辑、根详情批准、真实 MCP 状态原位更新并在
   const beforeAccept = await geometry(page);
   const beforeIds = (await current()).nodes.map(node => node.id);
   await taskPanel(page).getByRole('button', { name: '验收通过', exact: true }).click();
-  await expect(taskPanel(page)).toContainText('用户已验收');
+  await expect(taskPanel(page).locator('.panel-status')).toContainText('已验收');
   const accepted = await current();
   expect(accepted.status).toBe('accepted');
   expect(accepted.nodes.map(node => node.id)).toEqual(beforeIds);
@@ -315,18 +315,20 @@ test('长任务：节点完成后，测试里每个样例显示实际结果与�
   // There is no start node: the path begins at the first stage; the whole task drops down from the title icon.
   await expect(nodeCard(page, 'root')).toHaveCount(0);
   await page.locator('[data-task-toggle]').click();
-  await expect(taskPanel(page)).toContainText('最后交给你验收');
+  await expect(taskPanel(page)).toContainText('准确率不低于 95% 的模型，和一个拖照片就能试用的网页');
   for (const part of ['输入', '输出', '描述', '测试']) await expect(taskPanel(page).getByRole('heading', { name: part, exact: true })).toBeVisible();
   // Each agent's model, effort and mode are set by how hard its work is, and the user can change them.
   // Agent settings are a visible section of the task sheet, not hidden in a fold.
   await expect(taskPanel(page).getByRole('region', { name: 'Agent 分工与模型' })).toBeVisible();
-  await expect(taskPanel(page).locator('[data-agent-id="train"] .agent-config')).toContainText('claude-opus-5-5');
+  await expect(taskPanel(page).locator('[data-agent-id="train"] .agent-config')).toHaveText('claude-opus-5-5思考很高');
   await expect(taskPanel(page).locator('[data-agent-id="data"] .agent-config')).toContainText('思考低');
   await page.screenshot({ path: test.info().outputPath('reference-task-sheet.png') });
   await taskPanel(page).getByRole('button', { name: '调整模型与力度', exact: true }).click();
   await taskPanel(page).locator('[data-agent-id="data"]').getByLabel('思考力度').selectOption('medium');
   // The model is a real dropdown: switch to another known model, or type any name under 自定义.
   await taskPanel(page).locator('[data-agent-id="train"]').getByLabel('模型').selectOption('claude-sonnet-5-5');
+  await expect(taskPanel(page).locator('[data-agent-id="train"]').getByLabel('模型').locator('option')).toHaveText(['claude-sonnet-5-5', 'claude-opus-5-5', '自定义…']);
+  await expect(taskPanel(page).locator('[data-agent-id="train"]').getByLabel('方式')).toHaveCount(0);
   await taskPanel(page).locator('[data-agent-id="demo"]').getByLabel('模型').selectOption('__custom');
   await taskPanel(page).locator('[data-agent-id="demo"]').getByPlaceholder('输入模型名称').fill('my-local-model');
   await taskPanel(page).getByRole('button', { name: '保存为 v2', exact: true }).click();

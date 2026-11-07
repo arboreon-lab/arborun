@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ArborunService, coarseStages, planGaps } from '../src/mcp/core';
+import { ArborunService, coarseStages, modelGaps, planGaps } from '../src/mcp/core';
 import type { NodeSpec, ProposeInput } from '../src/mcp/schema';
 
 const agents = [
@@ -112,6 +112,7 @@ describe('以效果为中心的计划', () => {
     const { readFile } = await import('node:fs/promises');
     const model = JSON.parse(await readFile('examples/mcp-model-plan.json', 'utf8'));
     expect(planGaps(model.nodes)).toEqual([]);
+    expect(modelGaps(model.agents)).toEqual([]);
     // A long task is broken into many small steps; a stage done in one step is flagged as possibly too coarse.
     expect(model.nodes.filter((n: NodeSpec) => n.kind === 'action').length).toBeGreaterThanOrEqual(15);
     expect(coarseStages(model.nodes)).toEqual([]);
@@ -121,7 +122,8 @@ describe('以效果为中心的计划', () => {
   it('每个 Agent 按难度配模型、思考力度和方式，写进文字树；用户修改后生成新版本', () => {
     const tuned = [{ ...agents[0], effort: 'high' as const, mode: 'readonly' as const }, { ...agents[1], model: 'claude-opus-5-5', effort: 'xhigh' as const, mode: 'ask' as const, reason: '排错最难' }];
     const service = new ArborunService(), id = service.propose({ ...plan(), agents: tuned }).id;
-    expect(service.renderTree(id)).toContain('配置：模型 claude-opus-5-5｜思考力度 很高（xhigh）｜方式 改动前先问（ask）｜理由：排错最难');
+    expect(service.renderTree(id)).toContain('配置：模型 claude-opus-5-5｜思考力度 很高（xhigh）｜理由：排错最难');
+    expect(modelGaps(tuned)).toEqual(['「主 Agent」（main）的模型应为 claude-sonnet-5-5（简单）或 claude-opus-5-5（难）']);
     expect(() => service.propose({ ...plan(), agents: [{ ...agents[0], effort: 'max' as never }, agents[1]] })).toThrow();
     service.userAction({ type: 'approve', sessionId: id, expectedRevision: 1 });
     const edited = service.userAction({ type: 'edit', sessionId: id, expectedRevision: 1, nodes: plan().nodes as NodeSpec[], agents: [tuned[0], { ...tuned[1], effort: 'medium' }] });

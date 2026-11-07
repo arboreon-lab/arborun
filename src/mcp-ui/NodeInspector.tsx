@@ -124,7 +124,6 @@ function Editor({ node, session, busy, editRevision, onSave, onCancel, adding }:
       <fieldset className="cases-edit"><legend>测试样例（每行：输入 → 应该得到）</legend>
         {caseKinds.map(([k, name]) => <Field key={k} label={name} value={cases[k]} onChange={value => setCases(c => ({ ...c, [k]: value }))} multiline />)}
       </fieldset>
-      {isTest && <p className="note">保存后这是你的验收标准，Agent 不能改。</p>}
     </>}
     <label className="field"><span>属于</span><select value={draft.parentId || ''} disabled={isRoot} onChange={event => change('parentId', event.target.value || null)}>
       {isRoot && <option value="">无（根节点）</option>}{session.nodes.filter(item => !descendants.has(item.id) && ['group', 'result', 'agent'].includes(item.kind)).map(item => <option key={item.id} value={item.id}>{item.title}</option>)}
@@ -183,14 +182,14 @@ const resultOf = (node: NodeState, i: number): CaseResult | undefined => node.ca
 function Samples({ node, onGenerateCases, busy }: { node: NodeState; onGenerateCases?: (id: string) => void; busy: boolean }) {
   const cases = (node.cases ?? []).map((c, i) => ({ c, i, r: resultOf(node, i) }));
   return <>
-    {cases.length ? caseKinds.map(([k, label]) => { const rows = cases.filter(x => x.c.kind === k); return <div key={k} className="case-group" data-case-kind={k}>
+    {caseKinds.map(([k, label]) => { const rows = cases.filter(x => x.c.kind === k); return rows.length ? <div key={k} className="case-group" data-case-kind={k}>
       <h4>{label}</h4>
-      {rows.length ? <ul className="cases">{rows.map(({ c, i, r }) => <li key={i} data-case={i} data-result={r ? (r.passed ? 'passed' : 'failed') : 'pending'}>
+      <ul className="cases">{rows.map(({ c, i, r }) => <li key={i} data-case={i} data-result={r ? (r.passed ? 'passed' : 'failed') : 'pending'}>
         <div className="case-line"><span className="in">{c.input}</span><span className="arrow" aria-label="应该得到">→</span><span className="out">{c.expected}</span>
           <span className="verdict">{r ? (r.passed ? '✓ 通过' : '✗ 未通过') : node.status === 'running' ? '测试中' : '待测试'}</span></div>
         {r && <div className="case-result"><p className="actual">实际：{r.actual}</p>{r.proof.map((p, j) => <ProofView key={j} proof={p} />)}</div>}
-      </li>)}</ul> : <p className="note">暂无</p>}
-    </div>; }) : <p className="note">还没有样例。</p>}
+      </li>)}</ul>
+    </div> : null; })}
     {onGenerateCases && (!cases.length || caseKinds.some(([k]) => !cases.some(x => x.c.kind === k))) && <div className="row"><button type="button" className="btn" disabled={busy} onClick={() => onGenerateCases(node.id)}>让 Agent 补样例</button></div>}
   </>;
 }
@@ -247,7 +246,8 @@ const Outcome = ({ node }: { node: NodeState }) => node.result ? <Section><div c
 
 const effortNames = { low: '低', medium: '中', high: '高', xhigh: '很高' } as const;
 /** Offered in the model picker; anything else can be typed under 自定义. Hosts apply what they support. */
-const KNOWN_MODELS = ['claude-fable-5-1', 'claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5'];
+// Planning picks one of two: sonnet for simple work, opus for hard work.
+const KNOWN_MODELS = ['claude-sonnet-5-5', 'claude-opus-5-5'];
 /** A real dropdown of models (default, known ones, the ones in use) plus 自定义 for any other name. */
 function ModelPicker({ value, known, onChange }: { value?: string; known: string[]; onChange: (model?: string) => void }) {
   const [custom, setCustom] = useState(Boolean(value && !known.includes(value)));
@@ -256,10 +256,9 @@ function ModelPicker({ value, known, onChange }: { value?: string; known: string
     ? <span className="model-custom"><input id={id} value={value ?? ''} placeholder="输入模型名称" maxLength={100} autoFocus onChange={e => onChange(e.target.value || undefined)} />
         <button type="button" className="icon-btn" aria-label="从列表选择" title="从列表选择" onClick={() => { setCustom(false); if (value && !known.includes(value)) onChange(undefined); }}>×</button></span>
     : <select id={id} value={value ?? ''} onChange={e => { if (e.target.value === '__custom') { setCustom(true); onChange(undefined); } else onChange(e.target.value || undefined); }}>
-        <option value="">默认</option>{known.map(m => <option key={m} value={m}>{m}</option>)}<option value="__custom">自定义…</option>
+        {!value && <option value="" disabled hidden>选择模型</option>}{known.map(m => <option key={m} value={m}>{m}</option>)}<option value="__custom">自定义…</option>
       </select>}</label>;
 }
-const modeNames = { readonly: '只读', ask: '改动前先问', auto: '自动执行' } as const;
 /**
  * Who does what, and with which model, effort and mode. The planning agent sets them by how hard the work is; the person
  * changes them here (all agents in the task sheet, or the agents behind one node on its page). Saving makes a new version.
@@ -282,12 +281,10 @@ function Agents({ session, busy, onSave, ids, title = 'Agent 分工与模型' }:
       {draft ? <div className="agent-config edit">
         <ModelPicker value={a.model} known={models} onChange={model => set(a.id, { model })} />
         <label>思考力度<select value={a.effort ?? ''} onChange={e => set(a.id, { effort: (e.target.value || undefined) as AgentSpec['effort'] })}><option value="">默认</option>{Object.entries(effortNames).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
-        <label>方式<select value={a.mode ?? ''} onChange={e => set(a.id, { mode: (e.target.value || undefined) as AgentSpec['mode'] })}><option value="">默认</option>{Object.entries(modeNames).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
-      </div> : <p className="agent-config">{[a.model ?? '默认模型', a.effort ? `思考${effortNames[a.effort]}` : '默认力度', a.mode ? modeNames[a.mode] : '默认方式'].map((t, i) => <span key={i} className="chip-flat">{t}</span>)}</p>}
-      {a.reason && <p className="note">{a.reason}</p>}
+      </div> : <p className="agent-config">{[a.model ?? '默认模型', a.effort ? `思考${effortNames[a.effort]}` : '默认力度'].map((t, i) => <span key={i} className="chip-flat">{t}</span>)}</p>}
       {!ids && <><p>负责：{a.scope}</p><p>上限：{a.budget}</p></>}</div></li>)}</ul>
     {onSave && (draft
-      ? <><p className="note">保存后生成新版本，需要重新批准；宿主支持时，Agent 按这里的模型和力度执行。</p>{error && <p role="alert" className="callout fail">{error}</p>}
+      ? <>{error && <p role="alert" className="callout fail">{error}</p>}
           <div className="row"><button type="button" className="btn" disabled={busy} onClick={() => setDraft(null)}>取消</button><button type="button" className="btn primary" disabled={busy} onClick={() => void save()}>保存为 v{session.revision + 1}</button></div></>
       : <div className="row"><button type="button" className="btn" disabled={busy} onClick={() => setDraft(session.agents.map(a => ({ ...a })))}>调整模型与力度</button></div>)}
   </section>;
@@ -305,15 +302,13 @@ function WholeTask(props: NodeInspectorProps & { view: Map<string, ViewNode> }) 
       <Parts
         describe={<><Describe node={node} view={view} onLocate={onLocate} fallback={node.action || session.goal} />
           <ol className="path" aria-label="从输入到输出">
-            <li className="end"><span>输入</span></li>
             {stages.map(id => <li key={id}><button type="button" className="link-chip" onClick={() => onLocate(id)}><Glyph session={session} view={view} id={id} size={13} />{view.get(id)?.title ?? id}</button></li>)}
-            <li className="end"><span>输出 · 用户验收</span></li>
           </ol>
           {!!session.clarifications?.length && <details className="fold"><summary>已确认的要求（{session.clarifications.length}）</summary><dl className="qa">{session.clarifications.map((item, index) => <div key={index}><dt>{item.question}</dt><dd>{item.answer}</dd></div>)}</dl></details>}
 </>}
         input={<>{ends.input ? <p>{ends.input}</p> : <Unfilled />}
           {!!session.context.length && <details className="fold"><summary>依据的资料（{session.context.length}）</summary><ul>{session.context.map((item, i) => <li key={i}>{item}</li>)}</ul></details>}</>}
-        output={<><p>{ends.output}</p><p className="note">最后交给你验收</p></>}
+        output={<><p>{ends.output}</p></>}
         tests={results.length ? results.map(r => <div key={r.id} className="accept-item"><h4><button type="button" className="link-plain" onClick={() => onLocate(r.id)}><Glyph session={session} view={view} id={r.id} size={14} />{r.title}</button></h4>
           <TestRows session={session} view={view} ids={testsUnder(r.id)} onLocate={onLocate} /></div>) : <TestRows session={session} view={view} ids={testsUnder(node.id)} onLocate={onLocate} />} />
     <Agents session={session} busy={props.busy} onSave={props.onSaveAgents} />
@@ -331,13 +326,11 @@ function NodeCheck({ node, session, view, busy, onRollback }: { node: NodeState;
   const ran = session.attempts.some(a => a.nodeId === node.id || viewDescendants(view, node.id).includes(a.nodeId));
   if (!onRollback || !ran || !['passed', 'failed', 'blocked'].includes(status) || session.status === 'draft' || session.status === 'accepted') return null;
   return <div className="node-check" data-node-check={node.id}>
-    <h4>你的验收</h4>
-    <p>{status === 'passed' ? '这一步已完成。' : '这一步没有通过。'}看过上面的测试结果后，不满意可以马上中止，回到这里修改。</p>
     {open
       ? <><label className="field"><span>哪里不满意（可不填）</span><textarea value={note} onChange={e => setNote(e.target.value)} rows={2} maxLength={2000} /></label>
           <div className="row"><button type="button" className="btn" disabled={busy} onClick={() => setOpen(false)}>取消</button>
             <button type="button" className="btn danger" disabled={busy} onClick={() => void onRollback(node.id, note.trim() || undefined)}>中止并回到这里</button></div>
-          <p className="note">会停止所有正在进行的工作；这一步和依赖它的步骤需要重做，改完后重新批准。</p></>
+          <p className="note">将停止全部执行；这一步及依赖它的步骤需重做。</p></>
       : <div className="row"><button type="button" className="btn" disabled={busy} onClick={() => setOpen(true)}>不满意，中止并回到这里</button></div>}
   </div>;
 }
@@ -379,12 +372,11 @@ function Details(props: NodeInspectorProps & { node: NodeState; view: Map<string
     const doers = [...new Set(session.nodes.filter(n => !isContainer(n) && viewDescendants(view, node.id).includes(n.id)).map(n => n.agentId))];
     return <><Parts
       describe={<><Describe node={node} view={view} onLocate={onLocate} fallback={!result && node.output ? node.action : undefined} />
-        {!result && <><p className="note">包含：</p><Links session={session} view={view} ids={kids} onLocate={onLocate} /></>}
-        {workId && <details className="fold"><summary>Agent 要做的步骤（{view.get(workId)!.children.length}）· {stateLabel(session, view, workId)}</summary><Links session={session} view={view} ids={view.get(workId)!.children} onLocate={onLocate} /></details>}</>}
+        {!result && <><Links session={session} view={view} ids={kids} onLocate={onLocate} /></>}
+        {workId && <details className="fold"><summary>Agent 要做的步骤（{view.get(workId)!.children.length}）</summary><Links session={session} view={view} ids={view.get(workId)!.children} onLocate={onLocate} /></details>}</>}
       input={node.input ? <p>{node.input}</p> : <Unfilled />}
       output={<>{result ? <p>{node.action}</p> : node.output || node.action ? <p>{node.output || node.action}</p> : <Unfilled />}{result && node.output && <p>{node.output}</p>}</>}
-      tests={<>{tests.length ? <TestRows session={session} view={view} ids={tests} onLocate={onLocate} /> : <p className="note">这里还没有测试。</p>}
-        {result && !!tests.length && <p className="note">你设定的测试是验收标准；Agent 补充的只是额外检查。</p>}
+      tests={<>{tests.length ? <TestRows session={session} view={view} ids={tests} onLocate={onLocate} /> : <Unfilled />}
         {!!node.cases?.length && samples}
         <NodeCheck node={node} session={session} view={view} busy={props.busy} onRollback={props.onRollback} /></>} />
       <Agents session={session} busy={props.busy} onSave={props.onSaveAgents} ids={doers} title="执行的 Agent" /></>;
@@ -397,13 +389,13 @@ function Details(props: NodeInspectorProps & { node: NodeState; view: Map<string
     <Outcome node={node} />
     <Parts
       describe={<><Describe node={node} view={view} onLocate={onLocate} fallback={node.action} />
-        {node.mapping && node.action && node.action !== node.mapping && node.action !== node.title && <p className="note">{isTest ? '测试内容' : '具体动作'}：{node.action}</p>}</>}
+        </>}
       input={<><p>{node.input}</p>{node.target && <p className="where"><span>在哪</span><span className="mono">{node.target}</span></p>}</>}
       output={<>{node.output && <p>{node.output}</p>}
         {!!node.acceptance.length && <ul className="plain outcome">{node.acceptance.map((item, i) => <li key={i}>{item}</li>)}</ul>}
         {node.conditionOutcome !== undefined && <p>结果：{node.conditionOutcome === 'unknown' ? '还不确定' : node.conditionOutcome ? '成立' : '不成立'}</p>}</>}
       tests={<>{samples}<OtherEvidence node={node} session={session} />
-        {(node.caseResults?.length || node.evidence?.length) ? <p className="note">以上由 Agent 提供，仍需你确认。</p> : null}
+
         <NodeCheck node={node} session={session} view={view} busy={props.busy} onRollback={props.onRollback} /></>} />
     <Agents session={session} busy={props.busy} onSave={props.onSaveAgents} ids={[node.agentId]} title="执行的 Agent" />
     {fixing && <Section title="处理"><p>Agent 正在自动修复，你不用处理：</p><Live session={session} nodeId={fixing.nodeId} /><Links session={session} view={view} ids={[fixing.nodeId]} onLocate={onLocate} /></Section>}
@@ -476,7 +468,6 @@ export function NodeInspector(props: NodeInspectorProps) {
         <TestRows session={session} view={view} ids={tests} onLocate={onLocate} />
         {reviewing && <div className="row"><button type="button" className="btn" disabled={busy} onClick={() => props.onAskAi(r.id, true)}>退回这一项</button></div>}
       </section>; })}
-      {!results.length && <Section><p className="note">没有标出效果，请直接看各节点的结果。</p></Section>}
     </Shell>;
   }
   if (v?.kind === 'work') {
@@ -491,8 +482,7 @@ export function NodeInspector(props: NodeInspectorProps) {
   if (!node) return null;
   const title = mode === 'add' ? `添加到「${node.title}」` : mode === 'edit' ? `编辑「${node.title}」` : node.parentId === null ? '起点' : node.title;
   // The start node carries no task-wide numbers; those belong to the whole-task view under the title.
-  const nodeStatus = mode === 'detail' && current && node.parentId !== null ? <>{status(nodeId)}{node.kind === 'test' && <span className={`by ${node.by ?? 'agent'}`}>{node.by === 'user' ? '你设定' : 'Agent 补充'}</span>}
-    {!isContainer(node) && node.parentId !== null && <span className="agent"><Avatar session={session} agentId={node.agentId} /><span className="name">{session.agents.find(a => a.id === node.agentId)?.name ?? node.agentId}</span></span>}</> : null;
+  const nodeStatus = mode === 'detail' && current && node.parentId !== null ? <>{status(nodeId)}{node.kind === 'test' && <span className={`by ${node.by ?? 'agent'}`}>{node.by === 'user' ? '你设定' : 'Agent 补充'}</span>}</> : null;
   const menu = mode === 'detail' && current ? <div className="menu-wrap"><button type="button" className="icon-btn" aria-label="节点操作" aria-expanded={menuOpen} aria-haspopup="menu" disabled={busy} onClick={() => setMenuOpen(!menuOpen)}>
     <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></svg></button>
     {menuOpen && <><div className="menu-dismiss" onClick={() => setMenuOpen(false)} aria-hidden="true" /><div className="menu" role="menu" aria-label="节点操作">

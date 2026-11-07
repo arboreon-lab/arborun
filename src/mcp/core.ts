@@ -136,6 +136,12 @@ export function planGaps(nodes: NodeSpec[]): string[] {
   });
 }
 
+/** Planning uses two models only: sonnet for simple work, opus for hard work. */
+export const PLAN_MODELS = ['claude-sonnet-5-5', 'claude-opus-5-5'];
+export function modelGaps(agents: AgentSpec[]): string[] {
+  return agents.filter(a => !a.model || !PLAN_MODELS.includes(a.model)).map(a => `「${a.name}」（${a.id}）的模型应为 claude-sonnet-5-5（简单）或 claude-opus-5-5（难）`);
+}
+
 /** Stages that look too coarse for long work: an outcome produced by a single step. */
 export function coarseStages(nodes: NodeSpec[]): string[] {
   return nodes.filter(n => n.kind === 'result').flatMap(result => {
@@ -495,8 +501,8 @@ export class ArborunService {
       const last = index === session.agents.length - 1;
       lines.push(`│  ${last ? '└─' : '├─'} ${line(agent.name)}（${agent.id}）${agent.parentId ? `｜父 Agent：${agent.parentId}` : ''}`);
       const prefix = last ? '│     ' : '│  │  ';
-      const effort = { low: '低', medium: '中', high: '高', xhigh: '很高' } as const, mode = { readonly: '只读', ask: '改动前先问', auto: '自动执行' } as const;
-      const config = [agent.model && `模型 ${agent.model}`, agent.effort && `思考力度 ${effort[agent.effort]}（${agent.effort}）`, agent.mode && `方式 ${mode[agent.mode]}（${agent.mode}）`].filter(Boolean).join('｜');
+      const effort = { low: '低', medium: '中', high: '高', xhigh: '很高' } as const;
+      const config = [agent.model && `模型 ${agent.model}`, agent.effort && `思考力度 ${effort[agent.effort]}（${agent.effort}）`].filter(Boolean).join('｜');
       lines.push(`${prefix}├─ 分工：${agent.role.replace(/\s+/g, ' ')}`, `${prefix}├─ 范围：${agent.scope.replace(/\s+/g, ' ')}`,
         ...(config ? [`${prefix}├─ 配置：${config}${agent.reason ? `｜理由：${agent.reason.replace(/\s+/g, ' ')}` : ''}`] : []), `${prefix}└─ 预算约定：${agent.budget.replace(/\s+/g, ' ')}`);
     });

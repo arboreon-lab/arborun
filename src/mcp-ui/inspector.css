@@ -135,7 +135,7 @@ video.media { width: 100%; cursor: auto; }
 .agents-section h3 { text-align: left; }
 .agent-config { display: flex; flex-wrap: wrap; gap: 5px; margin: 6px 0 2px; }
 .chip-flat { font-size: 11.5px; line-height: 20px; padding: 0 9px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); color: var(--ink-2); font-variant-numeric: tabular-nums; }
-.agent-config.edit { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
+.agent-config.edit { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
 .agent-config.edit label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
 .agent-config.edit input, .agent-config.edit select { min-width: 0; width: 100%; padding: 6px 8px; font-size: 13px; }
 .model-custom { display: flex; gap: 4px; align-items: center; min-width: 0; }

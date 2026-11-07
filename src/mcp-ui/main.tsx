@@ -234,7 +234,6 @@ function Arborun() {
   const editing = inspector?.mode === 'edit' || inspector?.mode === 'add' || Boolean(request);
 
   const taskActions = session && <div className="task-detail-actions">
-    <p className="task-detail-state">v{session.revision} · {phaseNames[session.status]}</p>
     <div className="row">
       {['draft', 'paused'].includes(session.status) && <button className="btn primary" disabled={busy || editing} onClick={() => void perform(async () => {
         await act({ type: 'approve' }); await signalHost(`用户已批准 Arborun 执行树 ${session.id} 的 v${session.revision}。请读取最新状态，逐节点领取并执行，持续上报 Agent 位置、结果与问题，完成后提交验收树。`);
