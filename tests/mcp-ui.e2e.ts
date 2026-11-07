@@ -155,12 +155,16 @@ test('单击展开详情，双击进入任意节点，View 与层级返回共享
   // The top bar's right side carries only two icons, without visible text.
   await expect(page.locator('.tools button')).toHaveCount(2);
   await expect(page.locator('.tools')).toHaveText('');
-  // Folding turns the tree into the overview; selecting a result there expands the tree at it.
-  await page.getByRole('button', { name: '折叠为概览', exact: true }).click();
-  await expect(page.getByRole('region', { name: '执行树概览' })).toBeVisible();
-  await expect(page.getByTestId('tree-canvas')).toHaveCount(0);
-  await page.getByRole('button', { name: '展开详情', exact: true }).click();
-  await expect(page.getByTestId('tree-canvas')).toBeVisible();
+  // The top-right button opens every node in one click, agent work included, and folds them all again.
+  await expect(page.locator('.region')).toHaveCount(0);
+  const folded = await page.locator('.node').count();
+  await page.getByRole('button', { name: '全部展开', exact: true }).click();
+  await expect.poll(() => page.locator('.node').count()).toBeGreaterThan(folded);
+  await expect(page.locator('.node[data-kind="action"]').first()).toBeVisible();
+  await page.getByRole('button', { name: '全部折叠', exact: true }).click();
+  await expect.poll(() => page.locator('.node').count()).toBe(folded);
+  // There is no fixed acceptance node at the end of the tree.
+  await expect(nodeCard(page, '__accept')).toHaveCount(0);
   await expect(page.getByRole('button', { name: '切换为从左到右', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: '刷新', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: '画布选项', exact: true })).toHaveCount(0);
@@ -363,6 +367,19 @@ test('长任务：节点完成后，测试里每个样例显示实际结果与�
   await expect(video).toBeVisible();
   await expect.poll(() => video.evaluate(v => (v as HTMLVideoElement).readyState)).toBeGreaterThan(0);
   await page.screenshot({ path: test.info().outputPath('reference-sample-results.png'), fullPage: true });
+  // The step's own acceptance sits under its tests: not satisfied, stop everything and go back to this step.
+  const check = inspector(page).locator('[data-node-check="d-scan"]');
+  await check.getByRole('button', { name: '不满意，中止并回到这里', exact: true }).click();
+  await check.getByLabel('哪里不满意（可不填）').fill('坏图也要记下原因');
+  await check.getByRole('button', { name: '中止并回到这里', exact: true }).click();
+  await expect.poll(async () => (await current()).status).toBe('paused');
+  const after = await current();
+  expect(after.approval).toBeUndefined();
+  expect(after.nodes.find(n => n.id === 'd-scan')!.status).toBe('stale');
+  expect(after.aiRequests[0]).toContain('坏图也要记下原因');
+  // The step opens for editing right away.
+  await expect(page.locator('[data-inspector-mode="edit"]')).toBeVisible();
+  await expect(inspector(page)).toHaveAttribute('data-inspector-node', 'd-scan');
 });
 
 test('窄侧栏（如 Codex 侧栏）里：整体任务从标题旁展开、悬停出详情、缩小时名称居中', async ({ page }) => {
@@ -381,7 +398,9 @@ test('窄侧栏（如 Codex 侧栏）里：整体任务从标题旁展开、悬�
   await nodeButton(page, '照片整理干净').hover();
   await expect(page.locator('.hover-panel')).toContainText('照片整理干净');
   await expect.poll(async () => (await page.locator('.hover-panel').boundingBox())?.width ?? 0).toBeGreaterThan(200);
-  await page.mouse.move(2, 740);
+  // The preview pops up from the bottom here (the node is near the top), so leave towards empty canvas above it.
+  await expect(page.locator('.hover-panel')).toHaveClass(/bottom/);
+  await page.mouse.move(2, 70);
   await expect(page.locator('.hover-panel')).toHaveCount(0);
   // Zoomed out, a node shows only its name, centred in the circle.
   await page.getByTestId('tree-canvas').focus();

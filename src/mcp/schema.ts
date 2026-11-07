@@ -85,6 +85,8 @@ export const userActionSchema = z.discriminatedUnion('type', [
   z.object({ ...userBase, type: z.literal('accept') }).strict(),
   z.object({ ...userBase, type: z.literal('requestChanges'), message: text }).strict(),
   z.object({ ...userBase, type: z.literal('requestAi'), message: text }).strict(),
+  // The user is not satisfied with a finished node: stop everything and go back to that node.
+  z.object({ ...userBase, type: z.literal('rollback'), nodeId: id, message: z.string().trim().max(12000).optional() }).strict(),
   z.object({ ...userBase, type: z.literal('edit'), nodes: planFields.nodes,
     title: short.optional(), goal: text.optional(), context: z.array(text).max(50).optional(), agents: planFields.agents.optional(),
   }).strict(),

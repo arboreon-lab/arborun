@@ -91,8 +91,9 @@ export function buildView(session: Session): Map<string, ViewNode> {
     const parent = node.parentId ? view.get(node.parentId) : undefined;
     if (parent?.kind === 'result' && node.kind !== 'test') view.get(node.id)!.parentId = workId(parent.id);
   }
+  // Acceptance is not a fixed last node: each node's tests carry its own acceptance, and the whole task is accepted
+  // from the task sheet. The entry stays for task-wide counts and labels.
   if (root) {
-    view.get(root.id)!.children.push(ACCEPT_ID);
     view.set(ACCEPT_ID, { id: ACCEPT_ID, kind: 'accept', title: '用户验收', parentId: root.id, children: [], mode: 'seq' });
   }
   return view;

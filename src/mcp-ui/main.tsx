@@ -10,6 +10,21 @@ import { nodeSpecification, previewImpact } from './inspector-model';
 import './styles.css';
 
 const bridge = new TreeBridge();
+/**
+ * Node details pop up from the top or bottom of the canvas, on the side away from the node, so the node stays visible.
+ * The sheet takes the free space on that side (at least 240px; a pinned sheet up to 62% of the canvas, a hover preview 50%).
+ */
+type SheetPlace = { top: boolean; height: number };
+function placeFor(id: string, pinned = false): SheetPlace {
+  const area = document.querySelector('.workspace-area')?.getBoundingClientRect();
+  const node = document.querySelector(`[data-node-id="${CSS.escape(id)}"]`)?.getBoundingClientRect();
+  if (!area) return { top: false, height: 320 };
+  const head = 56, max = (area.height - head) * (pinned ? .62 : .5);
+  if (!node) return { top: false, height: Math.round(Math.max(240, max)) };
+  const top = (node.top + node.bottom) / 2 > area.top + area.height / 2;
+  const free = top ? node.top - area.top - head : area.bottom - node.bottom;
+  return { top, height: Math.round(Math.max(240, Math.min(max, free - 10))) };
+}
 const loadArtifact = (id: string) => bridge.artifact(id);
 const EXPANDED_HEIGHT = 640;
 const phaseNames: Record<Session['status'], string> = {
@@ -37,9 +52,11 @@ function Arborun() {
   // The whole task drops down under the title; hovering a node previews its details on the right.
   const [taskOpen, setTaskOpen] = useState(false);
   const [hoverId, setHoverId] = useState<string | null>(null);
-  const [hoverPlace, setHoverPlace] = useState<{ left: boolean; width: number }>({ left: false, width: 380 });
+  const [hoverPlace, setHoverPlace] = useState<SheetPlace>({ top: false, height: 320 });
+  const [pinnedPlace, setPinnedPlace] = useState<SheetPlace>({ top: false, height: 320 });
   const hoverTimer = useRef<number | undefined>(undefined);
   const overPanel = useRef(false);
+  const inspectorRef = useRef<string | undefined>(undefined);
   const [locateRequest, setLocateRequest] = useState<{ id: string; key: number }>();
   const [resetRequest, setResetRequest] = useState<{ id?: string; key: number }>();
   // Inline in the conversation the tree starts folded as an overview; elsewhere it starts expanded.
@@ -52,6 +69,7 @@ function Arborun() {
   const connectedRef = useRef(false);
   const busyRef = useRef(false);
   busyRef.current = busy;
+  inspectorRef.current = inspector?.id;
 
   useEffect(() => {
     let alive = true;
@@ -125,24 +143,22 @@ function Arborun() {
   };
   const openInspector = (id: string, mode: InspectorMode = 'detail') => {
     if (!session) return;
+    // A sheet that is already open stays where it is, so the pointer is not left over some other node.
+    if (!inspector) setPinnedPlace(placeFor(id, true));
+    window.clearTimeout(hoverTimer.current); setHoverId(null);
     if (inspector?.mode === 'edit' || inspector?.mode === 'add' || request) { setNotice('请先保存或取消当前编辑。'); return; }
     setSelectedId(id); setRequest(undefined); setInspector({ id, mode, revision: session.revision });
   };
-  // Hover shows a node's details after a short pause and hides them shortly after the pointer leaves,
-  // unless it moved onto the panel. Clicking pins the details; drafts are never replaced by a hover.
+  // Hover previews a node's details after a short pause and hides them when the pointer leaves the node. The preview
+  // is display-only (the pointer passes through it to the tree); clicking a node pins its details. Drafts are never replaced.
   const hover = (id: string | null) => {
     window.clearTimeout(hoverTimer.current);
-    if (inspector?.mode === 'edit' || inspector?.mode === 'add' || request) return;
+    if (inspector?.mode === 'edit' || inspector?.mode === 'add' || request || taskOpen) return;
     hoverTimer.current = window.setTimeout(() => {
       if (!id && overPanel.current) return;
-      // Keep the hovered node in view: the preview takes the wider free side, sized to it (380px at most, 240px at least).
-      if (id) {
-        const node = document.querySelector(`[data-node-id="${CSS.escape(id)}"]`)?.getBoundingClientRect(), area = document.querySelector('.workspace-area')?.getBoundingClientRect();
-        if (node && area) {
-          const leftSpace = node.left - area.left, rightSpace = area.right - node.right, left = leftSpace > rightSpace;
-          setHoverPlace({ left, width: Math.round(Math.max(240, Math.min(380, (left ? leftSpace : rightSpace) - 12))) });
-        }
-      }
+      // Hovering the node whose details are already pinned shows nothing extra.
+      if (id && id === inspectorRef.current) id = null;
+      if (id) setHoverPlace(placeFor(id));
       setHoverId(id);
     }, id ? 140 : 260);
   };
@@ -150,6 +166,7 @@ function Arborun() {
     // Canvas navigation must not move selection away from an open draft.
     if (inspector?.mode === 'edit' || inspector?.mode === 'add' || request) return;
     setSelectedId(id);
+    if (id) { setPinnedPlace(placeFor(id, true)); setTaskOpen(false); }
     setInspector(id && session ? { id, mode: 'detail', revision: session.revision } : undefined);
   };
   const saveNode = (node: NodeSpec) => perform(async () => {
@@ -166,6 +183,15 @@ function Arborun() {
     if (!session) return;
     await act({ type: 'edit', nodes: specs(session.nodes), agents }, session.revision);
     setNotice('已保存 Agent 设置。整任务需重新批准。');
+  });
+  // Not satisfied with a finished node: stop everything, go back to it, and open it for editing.
+  const rollback = (id: string, message?: string) => perform(async () => {
+    if (!session) return;
+    const target = session.nodes.find(n => n.id === id);
+    await act({ type: 'rollback', nodeId: id, ...(message ? { message } : {}) });
+    await signalHost(`用户对 Arborun 执行树 ${session.id} 中的「${target?.title ?? id}」不满意，已中止执行并回退到这个节点${message ? `：${message}` : ''}。请立即停止所有正在进行的动作，读取最新树；${message ? '按用户意见修改这个节点后用 arborun_plan 提交，' : ''}等待用户修改并重新批准，勿继续执行。`);
+    setHoverId(null); setTaskOpen(false);
+    if (session.nodes.some(n => n.id === id)) { setSelectedId(id); setPinnedPlace(placeFor(id, true)); setInspector({ id, mode: 'edit', revision: session.revision }); }
   });
   const removeNode = (id: string) => perform(async () => {
     if (!session || !inspector) return;
@@ -235,7 +261,7 @@ function Arborun() {
     {session && overview ? <div ref={overviewRef}><Overview session={session} onExpand={expand} taskActions={taskActions} /></div>
     : !session ? <section className="empty"><h1>{connected ? '等待决策执行树' : '连接执行树'}</h1><p>{connected ? '向当前 Agent 说明任务，让它结合上下文生成 Arborun 执行树。' : '正在连接 MCP 服务。'}</p>{!!sessions?.length && <ul>{sessions.map(s => <li key={s.id}><button onClick={() => void perform(() => bridge.read(s.id))}>{s.title}</button></li>)}</ul>}</section> : <>
       <div className="workspace-area" data-details={Boolean(inspector || request || showRecords)}>
-        <TreeCanvas key={session.id} session={session} selectedId={selectedId} onSelect={id => { setHoverId(null); select(id); }} taskOpen={taskOpen} onTaskToggle={open => setTaskOpen(open ?? !taskOpen)} onHover={hover} onOverview={() => { setInspector(undefined); setRequest(undefined); setShowRecords(false); setSelectedId(null); setOverview(true); }} onEnter={id => {
+        <TreeCanvas key={session.id} session={session} selectedId={selectedId} onSelect={id => { setHoverId(null); select(id); }} taskOpen={taskOpen} onTaskToggle={open => setTaskOpen(open ?? !taskOpen)} onHover={hover} onEnter={id => {
             if (editing) return;
             // Entering a single step or test opens its detail; entering a subtree starts with the tree alone.
             const entered = session.nodes.find(n => n.id === id);
@@ -246,15 +272,15 @@ function Arborun() {
           impact={inspector?.mode === 'edit' && session.nodes.some(n => n.id === inspector.id) ? new Set(previewImpact(session, specs(session.nodes).find(n => n.id === inspector.id)!).map(n => n.id)) : undefined} />
         {taskOpen && <div className="task-sheet" role="region" aria-label="整体任务">
           <NodeInspector key={`${session.id}:task`} session={session} nodeId={TASK_ID} mode="detail" busy={busy} editRevision={session.revision}
-            onClose={() => setTaskOpen(false)} onEdit={() => {}} onSave={saveNode} onDelete={removeNode} onAdd={() => {}} onAskAi={askAi} onGenerateCases={generateCases} loadArtifact={loadArtifact}
+            onClose={() => setTaskOpen(false)} onEdit={() => {}} onSave={saveNode} onDelete={removeNode} onAdd={() => {}} onAskAi={askAi} onGenerateCases={generateCases} onRollback={rollback} loadArtifact={loadArtifact}
             onLocate={id => { setTaskOpen(false); locate(id); }} onSaveAgents={saveAgents} taskActions={taskActions} />
         </div>}
-        {(hoverId && hoverId !== inspector?.id && !request && !showRecords) ? <div className={`hover-panel${hoverPlace.left ? ' left' : ''}`} style={{ width: hoverPlace.width }} onMouseEnter={() => { overPanel.current = true; window.clearTimeout(hoverTimer.current); }} onMouseLeave={() => { overPanel.current = false; hover(null); }}>
+        {(hoverId && hoverId !== inspector?.id && !request && !showRecords) ? <div className={`node-sheet hover-panel ${hoverPlace.top ? 'top' : 'bottom'}`} style={{ height: hoverPlace.height }} aria-hidden="true">
           <NodeInspector key={`${session.id}:hover:${hoverId}`} session={session} nodeId={hoverId} mode="detail" busy={busy} editRevision={session.revision}
-            onClose={() => setHoverId(null)} onEdit={() => { setHoverId(null); openInspector(hoverId, 'edit'); }} onSave={saveNode} onDelete={removeNode} onAdd={id => { setHoverId(null); openInspector(id, 'add'); }} onAskAi={askAi} onGenerateCases={generateCases} loadArtifact={loadArtifact}
+            onClose={() => setHoverId(null)} onEdit={() => { setHoverId(null); openInspector(hoverId, 'edit'); }} onSave={saveNode} onDelete={removeNode} onAdd={id => { setHoverId(null); openInspector(id, 'add'); }} onAskAi={askAi} onGenerateCases={generateCases} onRollback={rollback} loadArtifact={loadArtifact}
             onLocate={id => { setHoverId(null); locate(id); }} taskActions={hoverId === ACCEPT_ID ? taskActions : undefined} />
-        </div> : inspector && <div className="pinned-panel" onMouseEnter={() => { overPanel.current = true; }} onMouseLeave={() => { overPanel.current = false; }}><NodeInspector key={`${session.id}:${inspector.id}:${inspector.mode}`} session={session} nodeId={inspector.id} mode={inspector.mode} busy={busy} editRevision={inspector.revision}
-          onClose={() => { setInspector(undefined); setSelectedId(null); }} onEdit={() => openInspector(inspector.id, 'edit')} onSave={saveNode} onDelete={removeNode} onAdd={id => openInspector(id, 'add')} onAskAi={askAi} onGenerateCases={generateCases} loadArtifact={loadArtifact} onLocate={locate}
+        </div> : inspector && <div className={`node-sheet pinned-panel ${pinnedPlace.top ? 'top' : 'bottom'}`} style={{ height: pinnedPlace.height }} onMouseEnter={() => { overPanel.current = true; }} onMouseLeave={() => { overPanel.current = false; }}><NodeInspector key={`${session.id}:${inspector.id}:${inspector.mode}`} session={session} nodeId={inspector.id} mode={inspector.mode} busy={busy} editRevision={inspector.revision}
+          onClose={() => { setInspector(undefined); setSelectedId(null); }} onEdit={() => openInspector(inspector.id, 'edit')} onSave={saveNode} onDelete={removeNode} onAdd={id => openInspector(id, 'add')} onAskAi={askAi} onGenerateCases={generateCases} onRollback={rollback} loadArtifact={loadArtifact} onLocate={locate}
           onRecords={() => { setInspector(undefined); setShowRecords(true); }} onResetPosition={id => setResetRequest({ id, key: Date.now() })}
           taskActions={inspector.mode === 'detail' && (inspector.id === TASK_ID || inspector.id === ACCEPT_ID) ? taskActions : undefined} /></div>}
         {request && <aside className="side-panel request-panel" aria-label={request.rework ? '返工要求' : 'AI 修改要求'}><div className="panel-head"><h2>{request.completed ? '修改要求已保存' : request.rework ? '要求返工' : '让 AI 修改'}</h2><button className="icon-btn" aria-label="关闭" onClick={() => setRequest(undefined)}>×</button></div>

@@ -29642,6 +29642,8 @@ var userActionSchema = external_exports.discriminatedUnion("type", [
   external_exports.object({ ...userBase, type: external_exports.literal("accept") }).strict(),
   external_exports.object({ ...userBase, type: external_exports.literal("requestChanges"), message: text }).strict(),
   external_exports.object({ ...userBase, type: external_exports.literal("requestAi"), message: text }).strict(),
+  // The user is not satisfied with a finished node: stop everything and go back to that node.
+  external_exports.object({ ...userBase, type: external_exports.literal("rollback"), nodeId: id, message: external_exports.string().trim().max(12e3).optional() }).strict(),
   external_exports.object({
     ...userBase,
     type: external_exports.literal("edit"),
@@ -38006,6 +38008,17 @@ function assertUserTestsKept(previous, next) {
     }
   }
 }
+function subtreeIds(nodes, id2) {
+  const ids = /* @__PURE__ */ new Set([id2]);
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const n of nodes) if (n.parentId && ids.has(n.parentId) && !ids.has(n.id)) {
+      ids.add(n.id);
+      grew = true;
+    }
+  }
+  return ids;
+}
 function planGaps(nodes) {
   const names = { normal: "\u6B63\u5E38\u60C5\u51B5", boundary: "\u8FB9\u754C\u60C5\u51B5", extreme: "\u6781\u7AEF\u60C5\u51B5" };
   return nodes.flatMap((node2) => {
@@ -38092,6 +38105,21 @@ var ArborunService = class {
     if (!session.approval || session.approval.revision !== revision2 || session.approval.hash !== planHash(session) || !["approved", "running"].includes(session.status)) {
       throw new Error("\u5F53\u524D\u8BA1\u5212\u5C1A\u672A\u83B7\u7528\u6237\u6279\u51C6\u6216\u5DF2\u6682\u505C");
     }
+  }
+  /** A node, everything inside it, and everything that depends on any of those, transitively. */
+  downstream(session, id2) {
+    const out = subtreeIds(session.nodes, id2);
+    for (let grew = true; grew; ) {
+      grew = false;
+      for (const n of session.nodes) {
+        if (out.has(n.id)) continue;
+        if (n.dependsOn.some((d2) => out.has(d2)) || n.when && out.has(n.when.nodeId)) {
+          for (const x of subtreeIds(session.nodes, n.id)) out.add(x);
+          grew = true;
+        }
+      }
+    }
+    return out;
   }
   invalidateRunning(session, message, interrupted = false) {
     for (const attempt of session.attempts.filter((a) => a.status === "running")) {
@@ -38428,6 +38456,22 @@ ${p2.output.slice(-8e3)}`;
         session.status = "accepted";
         session.review.acceptedAt = now();
         this.event(session, "accepted", "\u7528\u6237\u5DF2\u9A8C\u6536\u5F53\u524D\u7ED3\u679C\u6811\u3002", "user_confirmed");
+      } else if (parsed.type === "rollback") {
+        const target = session.nodes.find((n) => n.id === parsed.nodeId);
+        if (!target) throw new Error("\u8282\u70B9\u4E0D\u5B58\u5728");
+        const affected = this.downstream(session, target.id);
+        if (!session.nodes.some((n) => affected.has(n.id) && n.attemptId)) throw new Error("\u8FD9\u4E2A\u8282\u70B9\u8FD8\u6CA1\u6709\u6267\u884C\uFF0C\u4E0D\u9700\u8981\u56DE\u9000");
+        this.invalidateRunning(session, "\u7528\u6237\u4E2D\u6B62\u6267\u884C\u5E76\u56DE\u9000\uFF1B\u5BBF\u4E3B\u5916\u90E8\u52A8\u4F5C\u53EF\u80FD\u4ECD\u9700\u6838\u5BF9\u3002");
+        session.approval = void 0;
+        session.review = void 0;
+        session.status = "paused";
+        for (const node2 of session.nodes) if (affected.has(node2.id) && !isContainer(node2)) {
+          node2.status = node2.attemptId ? "stale" : "draft";
+          node2.conditionOutcome = void 0;
+        }
+        const note = `\u7528\u6237\u5BF9\u300C${target.title}\u300D\uFF08${target.id}\uFF09\u4E0D\u6EE1\u610F\uFF0C\u5DF2\u4E2D\u6B62\u6267\u884C\u5E76\u56DE\u9000\u5230\u8FD9\u91CC${parsed.message ? `\uFF1A${parsed.message}` : "\u3002"}`;
+        if (parsed.message) session.aiRequests.push(note);
+        this.event(session, "rolled_back", note, "user_confirmed", { nodeId: target.id });
       } else if (parsed.type === "edit") {
         this.replacePlan(session, { title: parsed.title ?? session.title, goal: parsed.goal ?? session.goal, context: parsed.context ?? session.context, nodes: parsed.nodes, agents: parsed.agents ?? session.agents }, "user_confirmed");
       } else {
@@ -38508,7 +38552,7 @@ var ArborunRuntime = class {
     this.options = options;
     this.service = new ArborunService(options.snapshot, { recover: true });
     this.mcp = new McpServer({ name: "arborun", version: "0.2.3" }, {
-      instructions: 'Arborun is for large, open-ended, loosely specified work that cannot be done in one pass, such as training a model or writing a research paper. It keeps that work as a user-editable tree the person checks by results, not by code. Before proposing a plan, ask the user in the normal conversation to resolve missing requirements and decisions; record confirmed answers in clarifications and never put unanswered requirements into the tree. Break the work into stages (root children, in order) whose outcomes a person can check; put each checkable outcome in a kind=result node, with kind=test nodes under it ("when ..., you should see ...", by=user for tests the user stated or confirmed, by=agent for tests you add) and the action nodes that produce it. Break the work down finely: each action is one concrete thing an agent can finish and prove in one sitting (minutes to a few hours) with one checkable output; a stage usually holds several steps in order (dependsOn), and open-ended loops such as improving until a target is met become explicit rounds (find what fails, change one thing, compare, pick the best) rather than one big step. A long task typically has dozens of steps. Give each agent a model, effort (low, medium, high, xhigh) and mode (readonly, ask, auto) matched to how hard its work is - a strong model and high effort for open-ended design, research or debugging, a light model and low effort for routine scripted work, readonly for agents that only inspect - with a short plain reason; the user may change them. When you start a real subagent for an Arborun agent, use its model, effort and mode where the host supports them, and say so in the conversation when it does not. The root stands for the whole path: its input is what the whole task starts from and its output is what reaches user acceptance at the end; the first stage starts from the root input, the input of each later stage is what earlier stages produced, and the last stage produces the root output. Every node, the root included, reads as four parts: input, output, description (mapping: one or two sentences on how the input becomes the output; constraints for what to watch for) and tests. Each action/test also states target, acceptance and failure route, and generated cases: concrete samples with at least one normal, one boundary and one extreme case, each with input and expected output. Write every field briefly in plain everyday words a non-expert can follow: short sentences, no jargon unless the user used it; never repeat the same point in two fields. Show the tree and stop for the user to approve it in the Arborun panel; never approve or accept for the user and never use browser automation on the panel. After approval read the latest revision, claim each node before acting, do the work with your own tools, and report through arborun_report: for every sample a caseResults entry with what actually happened and proof a person can read without opening code - the command you ran and its output, a screenshot, a short demo recording (local file paths; Arborun stores them), plain text or a link. Report observable actions and messages through arborun_activity, then submit the results tree for human acceptance. Continue normal conversation output. A changed plan revokes approval; do not continue with old claims. If the host cannot show the panel, Arborun opens it in the local browser.'
+      instructions: 'Arborun is for large, open-ended, loosely specified work that cannot be done in one pass, such as training a model or writing a research paper. It keeps that work as a user-editable tree the person checks by results, not by code. Before proposing a plan, ask the user in the normal conversation to resolve missing requirements and decisions; record confirmed answers in clarifications and never put unanswered requirements into the tree. Break the work into stages (root children, in order) whose outcomes a person can check; put each checkable outcome in a kind=result node, with kind=test nodes under it ("when ..., you should see ...", by=user for tests the user stated or confirmed, by=agent for tests you add) and the action nodes that produce it. Break the work down finely: each action is one concrete thing an agent can finish and prove in one sitting (minutes to a few hours) with one checkable output; a stage usually holds several steps in order (dependsOn), and open-ended loops such as improving until a target is met become explicit rounds (find what fails, change one thing, compare, pick the best) rather than one big step. A long task typically has dozens of steps. Give each agent a model, effort (low, medium, high, xhigh) and mode (readonly, ask, auto) matched to how hard its work is - a strong model and high effort for open-ended design, research or debugging, a light model and low effort for routine scripted work, readonly for agents that only inspect - with a short plain reason; the user may change them. When you start a real subagent for an Arborun agent, use its model, effort and mode where the host supports them, and say so in the conversation when it does not. The root stands for the whole path: its input is what the whole task starts from and its output is what reaches user acceptance at the end; the first stage starts from the root input, the input of each later stage is what earlier stages produced, and the last stage produces the root output. Every node, the root included, reads as four parts: input, output, description (mapping: one or two sentences on how the input becomes the output; constraints for what to watch for) and tests. Each action/test also states target, acceptance and failure route, and generated cases: concrete samples with at least one normal, one boundary and one extreme case, each with input and expected output. Write every field briefly in plain everyday words a non-expert can follow: short sentences, no jargon unless the user used it; never repeat the same point in two fields. Show the tree and stop for the user to approve it in the Arborun panel; never approve or accept for the user and never use browser automation on the panel. After approval read the latest revision, claim each node before acting, do the work with your own tools, and report through arborun_report: for every sample a caseResults entry with what actually happened and proof a person can read without opening code - the command you ran and its output, a screenshot, a short demo recording (local file paths; Arborun stores them), plain text or a link. Report observable actions and messages through arborun_activity, then submit the results tree for human acceptance. There is no fixed final acceptance node: the tests of each node carry its acceptance, and the user may review any finished node at any time. If the user is not satisfied, they stop the run and roll back to that node: Arborun pauses the task, withdraws approval and marks that node and everything depending on it for redo. Then stop every running action at once, read the latest tree, and either wait for the user to edit it or, when a note is attached, update that node with arborun_plan and wait for approval again. Continue normal conversation output. A changed plan revokes approval; do not continue with old claims. If the host cannot show the panel, Arborun opens it in the local browser.'
     });
     this.register();
   }

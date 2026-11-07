@@ -24,9 +24,9 @@ const plan = () => [
 ];
 
 describe('the tree as the accepting person sees it', () => {
-  test('the trunk is the root path and always ends with user acceptance', () => {
+  test('the trunk is the root path; there is no fixed start or acceptance node', () => {
     const view = buildView(session(plan()));
-    expect(view.get('root')!.children).toEqual(['samples', 'effects', ACCEPT_ID]);
+    expect(view.get('root')!.children).toEqual(['samples', 'effects']);
     expect(view.get('root')!.mode).toBe('seq');
   });
   test('a container is a path when each child follows the previous one, otherwise branches', () => {
@@ -67,11 +67,13 @@ describe('the tree as the accepting person sees it', () => {
 });
 
 describe('view-only geometry', () => {
-  test.each<TreeView>(['tb', 'lr'])('%s: the trunk runs along one axis and acceptance is last', view => {
+  test.each<TreeView>(['tb', 'lr'])('%s: the trunk runs along one axis from the first stage to the last', view => {
     const tree = buildView(session(plan())), layout = layoutTree(tree, 'root', view, initialExpanded(tree, 'root'));
     const axis = view === 'tb' ? 'y' : 'x';
     const trunk = layout.trunk.map(id => layout.pos.get(id)!);
-    expect(layout.trunk.at(-1)).toBe(ACCEPT_ID);
+    expect(layout.trunk).toEqual(['samples', 'effects']);
+    expect(layout.pos.has('root')).toBe(false);
+    expect(layout.pos.has(ACCEPT_ID)).toBe(false);
     trunk.slice(1).forEach((p, i) => expect(p[axis]).toBeGreaterThan(trunk[i][axis]));
     expect(layout.rects).toEqual([]); // folded by default: the trunk alone
     const open = layoutTree(tree, 'root', view, new Set(['samples', 'effects', 'r1', 'r2']));

@@ -129,4 +129,26 @@ describe('以效果为中心的计划', () => {
     expect(edited.status).toBe('draft');
     expect(edited.agents[1].effort).toBe('medium');
   });
+
+  it('用户对已完成的节点不满意：中止执行，回退到该节点，它和依赖它的节点待重做', () => {
+    const service = new ArborunService(), id = service.propose(plan()).id;
+    service.userAction({ type: 'approve', sessionId: id, expectedRevision: 1 });
+    expect(() => service.userAction({ type: 'rollback', sessionId: id, expectedRevision: 1, nodeId: 'a-bom' })).toThrow('还没有执行');
+    const grant = service.claim({ sessionId: id, revision: 1, nodeId: 'a-bom', agentId: 'export' });
+    service.report({ sessionId: id, attemptId: grant.attemptId, claimToken: grant.claimToken, eventId: 'r1', status: 'passed', summary: '已加 BOM', evidence: ['ok'], checks: [{ criterion: 'a-bom 完成', passed: true, evidence: 'exit 0' }] });
+    const running = service.claim({ sessionId: id, revision: 1, nodeId: 't-open', agentId: 'export' });
+    const s = service.userAction({ type: 'rollback', sessionId: id, expectedRevision: 1, nodeId: 'a-bom', message: '还要支持 GBK' });
+    expect(s.status).toBe('paused');
+    expect(s.approval).toBeUndefined();
+    expect(s.nodes.find(n => n.id === 'a-bom')!.status).toBe('stale');
+    // Tests that depend on it go back too, and the running one is stopped.
+    expect(s.nodes.find(n => n.id === 't-open')!.status).toBe('stale');
+    expect(s.attempts.find(a => a.id === running.attemptId)!.invalidated).toBe(true);
+    expect(s.nodes.find(n => n.id === 't-wizard')!.status).toBe('draft');
+    expect(s.aiRequests[0]).toContain('还要支持 GBK');
+    expect(s.events.at(-1)!.type).toBe('rolled_back');
+    // The old claim can no longer report.
+    expect(() => service.report({ sessionId: id, attemptId: running.attemptId, claimToken: running.claimToken, eventId: 'r2', status: 'passed', summary: 'x', evidence: ['x'], checks: [] })).not.toThrow();
+    expect(service.get(id).nodes.find(n => n.id === 't-open')!.status).toBe('stale');
+  });
 });

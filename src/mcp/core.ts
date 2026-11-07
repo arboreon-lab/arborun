@@ -117,6 +117,12 @@ export function assertUserTestsKept(previous: NodeSpec[], next: NodeSpec[]): voi
   }
 }
 
+function subtreeIds(nodes: NodeSpec[], id: string): Set<string> {
+  const ids = new Set([id]);
+  for (let grew = true; grew;) { grew = false; for (const n of nodes) if (n.parentId && ids.has(n.parentId) && !ids.has(n.id)) { ids.add(n.id); grew = true; } }
+  return ids;
+}
+
 /** Which of the four parts (input, output, description, tests) a plan still leaves blank, per node, in plain words. */
 export function planGaps(nodes: NodeSpec[]): string[] {
   const names = { normal: '正常情况', boundary: '边界情况', extreme: '极端情况' } as const;
@@ -190,6 +196,18 @@ export class ArborunService {
     if (!session.approval || session.approval.revision !== revision || session.approval.hash !== planHash(session) || !['approved', 'running'].includes(session.status)) {
       throw new Error('当前计划尚未获用户批准或已暂停');
     }
+  }
+  /** A node, everything inside it, and everything that depends on any of those, transitively. */
+  private downstream(session: Session, id: string): Set<string> {
+    const out = subtreeIds(session.nodes, id);
+    for (let grew = true; grew;) {
+      grew = false;
+      for (const n of session.nodes) {
+        if (out.has(n.id)) continue;
+        if (n.dependsOn.some(d => out.has(d)) || (n.when && out.has(n.when.nodeId))) { for (const x of subtreeIds(session.nodes, n.id)) out.add(x); grew = true; }
+      }
+    }
+    return out;
   }
   private invalidateRunning(session: Session, message: string, interrupted = false) {
     for (const attempt of session.attempts.filter(a => a.status === 'running')) {
@@ -439,6 +457,20 @@ export class ArborunService {
         if (session.status !== 'review' || session.review?.revision !== session.revision) throw new Error('请先完成执行并提交当前版本验收树');
         session.status = 'accepted'; session.review.acceptedAt = now();
         this.event(session, 'accepted', '用户已验收当前结果树。', 'user_confirmed');
+      } else if (parsed.type === 'rollback') {
+        const target = session.nodes.find(n => n.id === parsed.nodeId);
+        if (!target) throw new Error('节点不存在');
+        const affected = this.downstream(session, target.id);
+        if (!session.nodes.some(n => affected.has(n.id) && n.attemptId)) throw new Error('这个节点还没有执行，不需要回退');
+        // Stop all running work, withdraw approval, and send this node and everything built on it back for redo.
+        this.invalidateRunning(session, '用户中止执行并回退；宿主外部动作可能仍需核对。');
+        session.approval = undefined; session.review = undefined; session.status = 'paused';
+        for (const node of session.nodes) if (affected.has(node.id) && !isContainer(node)) {
+          node.status = node.attemptId ? 'stale' : 'draft'; node.conditionOutcome = undefined;
+        }
+        const note = `用户对「${target.title}」（${target.id}）不满意，已中止执行并回退到这里${parsed.message ? `：${parsed.message}` : '。'}`;
+        if (parsed.message) session.aiRequests.push(note);
+        this.event(session, 'rolled_back', note, 'user_confirmed', { nodeId: target.id });
       } else if (parsed.type === 'edit') {
         this.replacePlan(session, { title: parsed.title ?? session.title, goal: parsed.goal ?? session.goal, context: parsed.context ?? session.context, nodes: parsed.nodes, agents: parsed.agents ?? session.agents }, 'user_confirmed');
       } else {

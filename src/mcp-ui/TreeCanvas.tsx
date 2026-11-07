@@ -21,8 +21,6 @@ export interface TreeCanvasProps {
   /** Restore dragged cards: one card when `id` is given, otherwise every card in the current scope and view. */
   resetRequest?: { id?: string; key: number };
   panelOpen?: boolean;
-  /** Fold the tree into the overview (replaces folding subtrees when provided). */
-  onOverview?: () => void;
   /** The whole task drops down from the title; the icon beside it toggles it. */
   taskOpen?: boolean;
   onTaskToggle?: (open?: boolean) => void;
@@ -67,7 +65,7 @@ export function Avatar({ session, agentId }: { session: Session; agentId: string
   return <span className="avatar" style={{ '--agent': agentColor(session, agentId) } as React.CSSProperties} title={name}>{name.slice(0, 1)}</span>;
 }
 
-export function TreeCanvas({ session, selectedId, onSelect, onEnter, editing = false, impact, locateRequest, resetRequest, panelOpen, onOverview, taskOpen = false, onTaskToggle, onHover }: TreeCanvasProps) {
+export function TreeCanvas({ session, selectedId, onSelect, onEnter, editing = false, impact, locateRequest, resetRequest, panelOpen, taskOpen = false, onTaskToggle, onHover }: TreeCanvasProps) {
   const view = useMemo(() => buildView(session), [session]);
   const root = session.nodes.find(n => n.parentId === null)?.id ?? '';
   const [scope, setScope] = useState(root);
@@ -163,8 +161,9 @@ export function TreeCanvas({ session, selectedId, onSelect, onEnter, editing = f
   }, [layout]);
   const groupsInScope = viewDescendants(view, scope).filter(id => isFolder(view.get(id)));
   const anyOpen = groupsInScope.some(id => expanded.has(id));
+  // One click opens every node in this view, agent work included, or folds them all.
   const foldAll = () => {
-    setExpanded(anyOpen ? new Set() : new Set(groupsInScope.filter(id => view.get(id)!.kind !== 'work')));
+    setExpanded(anyOpen ? new Set() : new Set(groupsInScope));
     needsFit.current = 'start'; setAnimate(true);
   };
   const switchView = () => { if (blocked()) return; setTreeView(v => v === 'tb' ? 'lr' : 'tb'); needsFit.current = 'start'; setAnimate(false); };
@@ -374,9 +373,7 @@ export function TreeCanvas({ session, selectedId, onSelect, onEnter, editing = f
               onClick={() => { if (blocked()) return; if (n.id !== scope) enter(n.id, true); onTaskToggle(!taskOpen); }}>{ICON.task}</button>}</>
           : <button type="button" data-breadcrumb={n.id} aria-current={n.id === scope ? 'page' : undefined} onClick={() => n.id === scope ? !blocked() && onSelect(n.id) : enter(n.id, true)}>{n.title}</button>}</React.Fragment>)}</nav>
       <div className="tools">
-        {onOverview
-          ? <button type="button" className="tool" data-fold aria-label="折叠为概览" title="折叠为概览" onClick={() => { if (!blocked()) onOverview(); }}>{ICON.fold}</button>
-          : <button type="button" className="tool" data-fold aria-label={anyOpen ? '全部折叠' : '全部展开'} title={anyOpen ? '全部折叠' : '全部展开'} onClick={foldAll}>{anyOpen ? ICON.fold : ICON.unfold}</button>}
+        <button type="button" className="tool" data-fold aria-label={anyOpen ? '全部折叠' : '全部展开'} title={anyOpen ? '全部折叠' : '全部展开'} onClick={() => { if (!blocked()) foldAll(); }}>{anyOpen ? ICON.fold : ICON.unfold}</button>
         <button type="button" className="tool" data-view-toggle aria-label={treeView === 'tb' ? '切换为从左到右' : '切换为从上到下'} title={treeView === 'tb' ? '切换为从左到右' : '切换为从上到下'} onClick={switchView}>{ICON[treeView]}</button>
       </div>
     </header>

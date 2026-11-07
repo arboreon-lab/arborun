@@ -21,6 +21,8 @@ export interface NodeInspectorProps {
   onAskAi: (nodeId: string | null, rework?: boolean) => void;
   /** Ask the host agent to generate normal, boundary and extreme samples for a node. */
   onGenerateCases?: (nodeId: string) => void;
+  /** Not satisfied with a finished node: stop the run and go back to that node. */
+  onRollback?: (nodeId: string, message?: string) => Promise<void>;
   /** Saves edited agent settings (a new version that needs approval). */
   onSaveAgents?: (agents: AgentSpec[]) => Promise<void>;
   /** Loads a stored screenshot or recording as a data: URL. */
@@ -298,6 +300,28 @@ function WholeTask(props: NodeInspectorProps & { view: Map<string, ViewNode> }) 
     </>;
   }
 
+/**
+ * Each node's own acceptance, at the end of its tests: once it has run, the person looks at the results and, if not
+ * satisfied, stops the whole run and goes back to this node to change it.
+ */
+function NodeCheck({ node, session, view, busy, onRollback }: { node: NodeState; session: Session; view: Map<string, ViewNode>; busy: boolean; onRollback?: (id: string, message?: string) => Promise<void> }) {
+  const [open, setOpen] = useState(false);
+  const [note, setNote] = useState('');
+  const status = aggregateStatus(session, view, node.id);
+  const ran = session.attempts.some(a => a.nodeId === node.id || viewDescendants(view, node.id).includes(a.nodeId));
+  if (!onRollback || !ran || !['passed', 'failed', 'blocked'].includes(status) || session.status === 'draft' || session.status === 'accepted') return null;
+  return <div className="node-check" data-node-check={node.id}>
+    <h4>你的验收</h4>
+    <p>{status === 'passed' ? '这一步已完成。' : '这一步没有通过。'}看过上面的测试结果后，不满意可以马上中止，回到这里修改。</p>
+    {open
+      ? <><label className="field"><span>哪里不满意（可不填）</span><textarea value={note} onChange={e => setNote(e.target.value)} rows={2} maxLength={2000} /></label>
+          <div className="row"><button type="button" className="btn" disabled={busy} onClick={() => setOpen(false)}>取消</button>
+            <button type="button" className="btn danger" disabled={busy} onClick={() => void onRollback(node.id, note.trim() || undefined)}>中止并回到这里</button></div>
+          <p className="note">会停止所有正在进行的工作；这一步和依赖它的步骤需要重做，改完后重新批准。</p></>
+      : <div className="row"><button type="button" className="btn" disabled={busy} onClick={() => setOpen(true)}>不满意，中止并回到这里</button></div>}
+  </div>;
+}
+
 /** Every node reads the same way: 描述 on top, 输入 → 输出 side by side, 测试 below. */
 function Parts({ describe, input, output, tests }: { describe: ReactNode; input: ReactNode; output: ReactNode; tests: ReactNode }) {
   return <>
@@ -340,7 +364,8 @@ function Details(props: NodeInspectorProps & { node: NodeState; view: Map<string
       output={<>{result ? <p>{node.action}</p> : node.output || node.action ? <p>{node.output || node.action}</p> : <Unfilled />}{result && node.output && <p>{node.output}</p>}</>}
       tests={<>{tests.length ? <TestRows session={session} view={view} ids={tests} onLocate={onLocate} /> : <p className="note">这里还没有测试。</p>}
         {result && !!tests.length && <p className="note">你设定的测试是验收标准；Agent 补充的只是额外检查。</p>}
-        {!!node.cases?.length && samples}</>} />;
+        {!!node.cases?.length && samples}
+        <NodeCheck node={node} session={session} view={view} busy={props.busy} onRollback={props.onRollback} /></>} />;
   }
   const isTest = node.kind === 'test';
   const result = isTest && view.get(node.parentId!)?.kind === 'result' ? node.parentId! : undefined;
@@ -356,7 +381,8 @@ function Details(props: NodeInspectorProps & { node: NodeState; view: Map<string
         {!!node.acceptance.length && <ul className="plain outcome">{node.acceptance.map((item, i) => <li key={i}>{item}</li>)}</ul>}
         {node.conditionOutcome !== undefined && <p>结果：{node.conditionOutcome === 'unknown' ? '还不确定' : node.conditionOutcome ? '成立' : '不成立'}</p>}</>}
       tests={<>{samples}<OtherEvidence node={node} session={session} />
-        {(node.caseResults?.length || node.evidence?.length) ? <p className="note">以上由 Agent 提供，仍需你确认。</p> : null}</>} />
+        {(node.caseResults?.length || node.evidence?.length) ? <p className="note">以上由 Agent 提供，仍需你确认。</p> : null}
+        <NodeCheck node={node} session={session} view={view} busy={props.busy} onRollback={props.onRollback} /></>} />
     {fixing && <Section title="处理"><p>Agent 正在自动修复，你不用处理：</p><Live session={session} nodeId={fixing.nodeId} /><Links session={session} view={view} ids={[fixing.nodeId]} onLocate={onLocate} /></Section>}
     {result && <Section title="所属效果"><Links session={session} view={view} ids={[result]} onLocate={onLocate} /></Section>}
     <Messages session={session} nodeId={node.id} />

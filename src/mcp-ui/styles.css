@@ -54,14 +54,16 @@ h1, h2, h3, h4, p { margin: 0; }
 .continuation summary { cursor: pointer; color: var(--muted); }
 .continuation textarea { width: 100%; margin-top: 8px; font: 13px var(--mono); color: var(--ink); background: transparent; border: 1.4px solid var(--line-strong); border-radius: var(--wobble-2); padding: 8px; }
 
-/* A clicked node's panel docks beside the canvas; a hovered node's preview slides over it, so hovering never reflows the tree. */
-.pinned-panel { min-height: 0; height: 100%; }
-.hover-panel { position: absolute; top: 56px; right: 0; bottom: 0; z-index: 32; max-width: 100%; display: flex; box-shadow: -18px 0 40px rgba(0, 0, 0, .55); animation: slide-in .16s ease-out; }
-.hover-panel.left { right: auto; left: 0; box-shadow: 18px 0 40px rgba(0, 0, 0, .55); animation-name: slide-in-left; }
-@keyframes slide-in-left { from { transform: translateX(-24px); opacity: 0; } }
-.pinned-panel > .node-inspector, .hover-panel > .node-inspector { height: 100%; }
-.hover-panel > .node-inspector { width: 100%; }
-@keyframes slide-in { from { transform: translateX(24px); opacity: 0; } }
+/* Node details pop up from the top or bottom of the canvas, on the side away from the node; hovering never reflows the tree. */
+.node-sheet { position: absolute; left: 0; right: 0; z-index: 31; display: flex; background: var(--bg); animation: .16s ease-out both; }
+.node-sheet.top { top: 56px; border-bottom: 1.4px solid var(--line-strong); box-shadow: 0 22px 44px rgba(0, 0, 0, .6); animation-name: sheet-down; }
+.node-sheet.bottom { bottom: 0; border-top: 1.4px solid var(--line-strong); box-shadow: 0 -22px 44px rgba(0, 0, 0, .6); animation-name: sheet-up; }
+.node-sheet.hover-panel { z-index: 33; pointer-events: none; }
+.node-sheet.hover-panel .panel-foot, .node-sheet.hover-panel .menu-wrap, .node-sheet.hover-panel .icon-btn { visibility: hidden; }
+.workspace-area .node-sheet > .node-inspector { position: relative; inset: auto; z-index: auto; width: 100%; max-width: 860px; height: 100%; margin: 0 auto; }
+.node-sheet > .node-inspector::before { display: none; }
+@keyframes sheet-down { from { transform: translateY(-16px); opacity: 0; } }
+@keyframes sheet-up { from { transform: translateY(16px); opacity: 0; } }
 /* The whole task drops down from the title. */
 .task-sheet { position: absolute; top: 56px; left: 0; right: 0; height: min(78%, 760px); z-index: 34; display: flex; background: var(--bg); border-bottom: 1.4px solid var(--line-strong); box-shadow: 0 24px 50px rgba(0, 0, 0, .65); animation: drop-down .18s ease-out; }
 .workspace-area .task-sheet > .node-inspector, .workspace-area .hover-panel > .node-inspector { position: relative; inset: auto; z-index: auto; }
@@ -88,4 +90,4 @@ h1, h2, h3, h4, p { margin: 0; }
   .workspace-area { grid-template-columns: minmax(0, 1fr); }
   .node-inspector, .side-panel { position: absolute; inset: 0 0 0 auto; width: 100%; z-index: 30; }
 }
-@media (prefers-reduced-motion: reduce) { .btn:hover { transform: none; } .hover-panel, .task-sheet { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .btn:hover { transform: none; } .node-sheet, .task-sheet { animation: none; } }
