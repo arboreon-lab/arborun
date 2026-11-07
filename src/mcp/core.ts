@@ -441,10 +441,9 @@ export class ArborunService {
       if (!isContainer(node)) {
         details.push(`动作：${node.action}`, `对象：${node.target}`, `输入：${node.input}`);
         if (node.output) details.push(`输出：${node.output}`);
-        if (node.mapping) details.push(`说明：${node.mapping}`);
-        if (node.constraints?.length) details.push(`约束：${node.constraints.join('；')}`);
+        if (node.mapping || node.constraints?.length) details.push(`怎么做：${[node.mapping, ...(node.constraints ?? []).map(c => `注意${c}`)].filter(Boolean).join('；')}`);
         details.push(`通过条件：${node.acceptance.join('；')}`, `失败处理：${node.failure}`);
-        const caseNames = { normal: '正常值', boundary: '边界情况', extreme: '极端情况' } as const;
+        const caseNames = { normal: '正常情况', boundary: '边界情况', extreme: '极端情况' } as const;
         for (const c of node.cases ?? []) details.push(`测试样例·${caseNames[c.kind]}：${c.input} → ${c.expected}`);
         if (node.dependsOn.length) details.push(`执行依赖：${node.dependsOn.join('、')}`);
         if (node.conditionOutcome !== undefined) details.push(`条件结果：${node.conditionOutcome}`);

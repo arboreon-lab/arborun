@@ -75,8 +75,7 @@ describe('以效果为中心的计划', () => {
     expect([saved.output, saved.mapping, saved.constraints, saved.cases]).toEqual([detailed.output, detailed.mapping, detailed.constraints, cases]);
     const tree = service.renderTree(id);
     expect(tree).toContain('输出：下载文件以 EF BB BF 开头');
-    expect(tree).toContain('说明：序列化后在开头加 BOM 再下载');
-    expect(tree).toContain('约束：只加一次 BOM');
+    expect(tree).toContain('怎么做：序列化后在开头加 BOM 再下载；注意只加一次 BOM');
     expect(tree).toContain('测试样例·边界情况：空字符串 → 空字符串');
     expect(() => service.propose(plan([root, result, userTest, agentTest, { ...work, cases: [{ kind: 'huge' as never, input: 'x', expected: 'y' }] }]))).toThrow();
     service.userAction({ type: 'approve', sessionId: id, expectedRevision: 1 });

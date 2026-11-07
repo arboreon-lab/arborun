@@ -79,13 +79,13 @@
       "parentId": "samples",
       "kind": "test",
       "title": "样本覆盖全部边界情况",
-      "action": "当打开 samples/ 时，应看到中文、逗号、引号、换行、空值各至少一个样本。",
-      "target": "samples/",
-      "input": "需求中的边界情况清单",
+      "action": "打开样本文件夹，看看各种特殊内容是不是都有样本。",
+      "target": "样本文件夹",
+      "input": "需求里列出的特殊内容",
       "acceptance": [
-        "中文、逗号、引号、换行、空值各至少一个样本"
+        "中文、逗号、引号、换行、空格子各至少有一个样本"
       ],
-      "failure": "记录未通过的检查与证据；在预算内自动修复，超出预算时停下并说明原因。",
+      "failure": "把没通过的地方和截图记下来，Agent 自己修；修 3 次还不行就停下来告诉你原因。",
       "dependsOn": [],
       "agentId": "main",
       "by": "user"
@@ -121,13 +121,13 @@
       "parentId": "r-zh",
       "kind": "test",
       "title": "双击打开中文正常",
-      "action": "当用 Excel 2016 双击打开 chinese.csv 时，应看到姓名、备注列中文正常。",
-      "target": "Excel 2016 · samples/chinese.csv",
-      "input": "samples/chinese.csv",
+      "action": "用 Excel 2016 双击打开中文样本，看姓名和备注是不是正常中文。",
+      "target": "Excel 2016 · 中文样本",
+      "input": "中文样本文件",
       "acceptance": [
-        "姓名、备注列中文正常显示"
+        "姓名、备注里的中文正常显示"
       ],
-      "failure": "记录未通过的检查与证据；在预算内自动修复，超出预算时停下并说明原因。",
+      "failure": "把没通过的地方和截图记下来，Agent 自己修；修 3 次还不行就停下来告诉你原因。",
       "dependsOn": [
         "a-bom"
       ],
@@ -139,13 +139,13 @@
       "parentId": "r-zh",
       "kind": "test",
       "title": "导入向导读取正常",
-      "action": "当用导入向导选择 UTF-8 读取同一文件时，应看到与双击打开相同的内容。",
-      "target": "Excel 2016 导入向导",
-      "input": "samples/chinese.csv",
+      "action": "用 Excel 的导入功能打开同一个文件，看内容是不是和双击打开一样。",
+      "target": "Excel 2016 · 导入功能",
+      "input": "中文样本文件",
       "acceptance": [
-        "三列中文与双击打开一致"
+        "三列中文和双击打开时一样"
       ],
-      "failure": "记录未通过的检查与证据；在预算内自动修复，超出预算时停下并说明原因。",
+      "failure": "把没通过的地方和截图记下来，Agent 自己修；修 3 次还不行就停下来告诉你原因。",
       "dependsOn": [
         "a-bom"
       ],
@@ -157,36 +157,36 @@
       "parentId": "r-zh",
       "kind": "action",
       "title": "默认下载加 BOM",
-      "action": "下载入口写入 UTF-8 BOM（EF BB BF）。",
-      "target": "src/downloadCsv.ts",
-      "input": "已确认：目标为 Excel 2016 双击打开",
+      "action": "下载文件时在最前面加一个标记，让 Excel 认出是中文。",
+      "target": "下载功能的代码",
+      "input": "已确认：要用 Excel 2016 双击打开",
       "acceptance": [
-        "下载文件以 EF BB BF 开头"
+        "Excel 双击打开时中文不乱码"
       ],
-      "failure": "记录未通过的检查与证据；在预算内自动修复，超出预算时停下并说明原因。",
+      "failure": "把没通过的地方和截图记下来，Agent 自己修；修 3 次还不行就停下来告诉你原因。",
       "dependsOn": [],
       "agentId": "export",
-      "output": "下载的文件字节流以 EF BB BF 开头",
-      "mapping": "在序列化后的 CSV 文本前加 UTF-8 BOM，再交给下载逻辑；Excel 2016 据此按 UTF-8 解析中文。",
+      "output": "文件开头多了一个“这是 UTF-8”的标记",
+      "mapping": "在文件最前面加一个标记，告诉 Excel 用 UTF-8 读，这样中文不乱码。",
       "constraints": [
-        "只加一次 BOM，不重复",
-        "不改变后续内容的编码"
+        "标记只加一次",
+        "文件其余内容不变"
       ],
       "cases": [
         {
           "kind": "normal",
-          "input": "含中文的 3 行订单",
-          "expected": "文件以 EF BB BF 开头，中文正常"
+          "input": "3 行带中文的订单",
+          "expected": "打开后中文正常"
         },
         {
           "kind": "boundary",
-          "input": "只有表头、没有数据行",
-          "expected": "仍以 BOM 开头，表头正常"
+          "input": "只有表头，没有订单",
+          "expected": "表头中文正常"
         },
         {
           "kind": "extreme",
           "input": "5 万行订单",
-          "expected": "只在开头有一个 BOM，导出不超时"
+          "expected": "中文正常，导出不卡住"
         }
       ]
     },
@@ -195,13 +195,13 @@
       "parentId": "r-zh",
       "kind": "action",
       "title": "保留关闭 BOM 的选项",
-      "action": "导出设置中增加“不带 BOM”选项，默认关闭。",
-      "target": "src/downloadCsv.ts",
+      "action": "在导出设置里加一个“不加标记”的开关，默认关着。",
+      "target": "下载功能的代码",
       "input": "已确认的编码要求",
       "acceptance": [
-        "关闭后输出不含 BOM"
+        "打开开关后，文件里没有这个标记"
       ],
-      "failure": "记录未通过的检查与证据；在预算内自动修复，超出预算时停下并说明原因。",
+      "failure": "把没通过的地方和截图记下来，Agent 自己修；修 3 次还不行就停下来告诉你原因。",
       "dependsOn": [
         "a-bom"
       ],
@@ -225,39 +225,38 @@
       "parentId": "r-escape",
       "kind": "test",
       "title": "边界样本列数一致",
-      "action": "当 6 个边界样本用 Excel 打开时，每行列数应与原数据一致。",
-      "target": "Excel 2016 · samples/",
-      "input": "samples/ 全部样本",
+      "action": "用 Excel 打开 6 个特殊样本，看每行是不是还是原来那几列。",
+      "target": "Excel 2016 · 样本文件夹",
+      "input": "全部样本",
       "acceptance": [
-        "每行列数与原数据一致"
+        "每行列数和原数据一样"
       ],
-      "failure": "记录未通过的检查与证据；在预算内自动修复，超出预算时停下并说明原因。",
+      "failure": "把没通过的地方和截图记下来，Agent 自己修；修 3 次还不行就停下来告诉你原因。",
       "dependsOn": [
         "a-quote"
       ],
       "agentId": "compat",
       "by": "user",
-      "output": "每个样本打开后的列数与原数据一致",
-      "mapping": "用 Excel 2016 逐个打开 samples/ 中导出的文件，数每一行的列数，与源数据的字段数比对。",
+      "mapping": "用 Excel 2016 双击打开每个样本，看每行是不是还是原来那几列。",
       "constraints": [
-        "使用 Excel 2016 双击打开，不用导入向导",
-        "截图作为证据"
+        "用双击打开，不用导入向导",
+        "每个样本截一张图"
       ],
       "cases": [
         {
           "kind": "normal",
-          "input": "comma.csv：备注含一个逗号",
-          "expected": "5 列"
+          "input": "备注里有一个逗号",
+          "expected": "还是 5 列"
         },
         {
           "kind": "boundary",
           "input": "备注以逗号开头或结尾",
-          "expected": "5 列，逗号留在备注内"
+          "expected": "还是 5 列，逗号留在备注里"
         },
         {
           "kind": "extreme",
-          "input": "备注同时含逗号、引号、换行和 emoji",
-          "expected": "5 列，备注完整显示在一个单元格"
+          "input": "备注同时有逗号、引号、换行和表情",
+          "expected": "还是 5 列，备注完整在一格里"
         }
       ]
     },
@@ -266,13 +265,13 @@
       "parentId": "r-escape",
       "kind": "test",
       "title": "多行备注留在同一格",
-      "action": "当备注含换行时，应看到它仍在同一单元格内。",
-      "target": "Excel 2016 · samples/multiline.csv",
-      "input": "samples/multiline.csv",
+      "action": "打开备注里有换行的样本，看备注是不是还在一个格子里。",
+      "target": "Excel 2016 · 换行样本",
+      "input": "换行样本文件",
       "acceptance": [
-        "含换行的备注保持在同一单元格"
+        "有换行的备注还在同一个格子里"
       ],
-      "failure": "记录未通过的检查与证据；在预算内自动修复，超出预算时停下并说明原因。",
+      "failure": "把没通过的地方和截图记下来，Agent 自己修；修 3 次还不行就停下来告诉你原因。",
       "dependsOn": [
         "a-quote"
       ],
@@ -284,21 +283,20 @@
       "parentId": "r-escape",
       "kind": "action",
       "title": "字段整体加引号",
-      "action": "含逗号、引号或换行的字段整体加双引号，内部引号成对转义。",
-      "target": "src/exportCsv.ts",
-      "input": "samples/ 与 CSV 规则",
+      "action": "有逗号、引号或换行的格子，整格加引号包起来。",
+      "target": "导出功能的代码",
+      "input": "样本文件夹和 CSV 的写法规则",
       "acceptance": [
-        "escapeCell 单元测试通过"
+        "所有样本导出后格子都不会被拆开"
       ],
-      "failure": "记录未通过的检查与证据；在预算内自动修复，超出预算时停下并说明原因。",
+      "failure": "把没通过的地方和截图记下来，Agent 自己修；修 3 次还不行就停下来告诉你原因。",
       "dependsOn": [],
       "agentId": "export",
-      "output": "escapeCell(value) 返回可直接写入 CSV 的单元格文本",
-      "mapping": "含逗号、双引号或换行的值整体用双引号包住，值内的每个双引号写成两个；其他值原样输出，空值输出空字符串。",
+      "output": "可以直接写进表格的格子内容",
+      "mapping": "内容里有逗号、引号或换行时，用一对引号把整格包起来，里面的引号写两遍；其他内容不动。",
       "constraints": [
-        "遵循 RFC 4180",
-        "不改变不含特殊字符的值",
-        "只修改 src/exportCsv.ts 及其测试"
+        "普通内容保持原样",
+        "只改导出相关的代码"
       ],
       "cases": [
         {
@@ -313,23 +311,23 @@
         },
         {
           "kind": "boundary",
-          "input": "空字符串",
-          "expected": "空字符串"
+          "input": "空格子",
+          "expected": "空格子"
         },
         {
           "kind": "boundary",
-          "input": "只有一个双引号 \"",
+          "input": "只有一个引号 \"",
           "expected": "\"\"\"\""
         },
         {
           "kind": "extreme",
-          "input": "10 万字符、混合逗号引号换行的备注",
-          "expected": "整体加引号，内部引号全部成对，长度正确"
+          "input": "很长的备注，夹着逗号、引号和换行",
+          "expected": "整格包好，一个字不少"
         },
         {
           "kind": "extreme",
-          "input": "null / undefined",
-          "expected": "空字符串，不抛错"
+          "input": "没有值",
+          "expected": "空格子，不报错"
         }
       ]
     },
@@ -338,13 +336,13 @@
       "parentId": "r-escape",
       "kind": "action",
       "title": "统一换行后再转义",
-      "action": "先把 \\r\\n 统一为 \\n，再进入转义，避免换行把记录拆开。",
-      "target": "src/exportCsv.ts",
-      "input": "失败样本 comma.csv、multiline.csv",
+      "action": "先把不同系统的换行统一成一种，再加引号，免得一行被拆成两行。",
+      "target": "导出功能的代码",
+      "input": "之前没通过的两个样本",
       "acceptance": [
-        "失败样本重新导出后列数正确"
+        "这两个样本重新导出后列数正确"
       ],
-      "failure": "记录未通过的检查与证据；在预算内自动修复，超出预算时停下并说明原因。",
+      "failure": "把没通过的地方和截图记下来，Agent 自己修；修 3 次还不行就停下来告诉你原因。",
       "dependsOn": [
         "a-quote"
       ],
@@ -368,14 +366,14 @@
       "parentId": "r-dl",
       "kind": "test",
       "title": "点击导出得到 export.csv",
-      "action": "当在订单页点击“导出”时，应下载 export.csv，编码为 UTF-8 BOM。",
+      "action": "在订单页点“导出”，看下载的文件名和中文是否正常。",
       "target": "订单页 · 导出按钮",
-      "input": "本地开发环境的订单数据",
+      "input": "本地的订单数据",
       "acceptance": [
-        "下载文件名为 export.csv",
-        "文件以 EF BB BF 开头"
+        "下载的文件叫 export.csv",
+        "用 Excel 打开中文正常"
       ],
-      "failure": "记录未通过的检查与证据；在预算内自动修复，超出预算时停下并说明原因。",
+      "failure": "把没通过的地方和截图记下来，Agent 自己修；修 3 次还不行就停下来告诉你原因。",
       "dependsOn": [
         "a-dl"
       ],
@@ -387,13 +385,13 @@
       "parentId": "r-dl",
       "kind": "action",
       "title": "调整下载文件名与编码",
-      "action": "下载文件名固定为 export.csv，并使用带 BOM 的编码。",
-      "target": "src/downloadCsv.ts",
+      "action": "把下载的文件名固定为 export.csv，并加上让中文正常的标记。",
+      "target": "下载功能的代码",
       "input": "已确认的编码要求",
       "acceptance": [
-        "下载文件名与编码符合要求"
+        "文件名和中文显示都符合要求"
       ],
-      "failure": "记录未通过的检查与证据；在预算内自动修复，超出预算时停下并说明原因。",
+      "failure": "把没通过的地方和截图记下来，Agent 自己修；修 3 次还不行就停下来告诉你原因。",
       "dependsOn": [
         "a-bom"
       ],
