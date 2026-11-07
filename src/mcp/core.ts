@@ -139,7 +139,14 @@ export function planGaps(nodes: NodeSpec[]): string[] {
 /** Planning uses two models only: sonnet for simple work, opus for hard work. */
 export const PLAN_MODELS = ['claude-sonnet-5-5', 'claude-opus-5-5'];
 export function modelGaps(agents: AgentSpec[]): string[] {
-  return agents.filter(a => !a.model || !PLAN_MODELS.includes(a.model)).map(a => `「${a.name}」（${a.id}）的模型应为 claude-sonnet-5-5（简单）或 claude-opus-5-5（难）`);
+  const gaps = agents.filter(a => !a.model || !PLAN_MODELS.includes(a.model)).map(a => `「${a.name}」（${a.id}）的模型应为 claude-sonnet-5-5（简单）或 claude-opus-5-5（难）`);
+  // The main agent plans and coordinates: it takes the higher tier of model and a high effort.
+  for (const a of agents.filter(a => !a.parentId)) {
+    if ((a.model && PLAN_MODELS.includes(a.model) && a.model !== 'claude-opus-5-5') || (a.effort && !['high', 'xhigh'].includes(a.effort))) {
+      gaps.push(`「${a.name}」（${a.id}）负责规划统筹，应用较高档位的模型（claude-opus-5-5）和较高的思考强度（high 或 xhigh）`);
+    }
+  }
+  return gaps;
 }
 
 /** Stages that look too coarse for long work: an outcome produced by a single step. */

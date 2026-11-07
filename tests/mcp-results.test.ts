@@ -124,6 +124,9 @@ describe('以效果为中心的计划', () => {
     const service = new ArborunService(), id = service.propose({ ...plan(), agents: tuned }).id;
     expect(service.renderTree(id)).toContain('配置：模型 claude-opus-5-5｜思考力度 很高（xhigh）｜理由：排错最难');
     expect(modelGaps(tuned)).toEqual(['「主 Agent」（main）的模型应为 claude-sonnet-5-5（简单）或 claude-opus-5-5（难）']);
+    // The main, coordinating agent is held to the higher tier of model and a high effort.
+    expect(modelGaps([{ ...agents[0], model: 'claude-sonnet-5-5', effort: 'medium' }])).toEqual(['「主 Agent」（main）负责规划统筹，应用较高档位的模型（claude-opus-5-5）和较高的思考强度（high 或 xhigh）']);
+    expect(modelGaps([{ ...agents[0], model: 'claude-opus-5-5', effort: 'high' }])).toEqual([]);
     expect(() => service.propose({ ...plan(), agents: [{ ...agents[0], effort: 'max' as never }, agents[1]] })).toThrow();
     service.userAction({ type: 'approve', sessionId: id, expectedRevision: 1 });
     const edited = service.userAction({ type: 'edit', sessionId: id, expectedRevision: 1, nodes: plan().nodes as NodeSpec[], agents: [tuned[0], { ...tuned[1], effort: 'medium' }] });
