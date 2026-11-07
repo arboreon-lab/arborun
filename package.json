@@ -1,0 +1,18 @@
+{
+  "name": "arborun-mcp",
+  "version": "0.2.3",
+  "description": "Arborun MCP server: editable, acceptance-centred execution trees for agents",
+  "type": "module",
+  "bin": {
+    "arborun-mcp": "index.mjs"
+  },
+  "files": [
+    "index.mjs",
+    "tree.html"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "repository": "github:arboreon-lab/arborun",
+  "license": "UNLICENSED"
+}
