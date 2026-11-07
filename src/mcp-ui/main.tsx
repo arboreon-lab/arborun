@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import type { NodeSpec, NodeState, Session, UserActionInput } from '../mcp/schema';
 import { TreeBridge, type ViewData } from './bridge';
 import { TreeCanvas } from './TreeCanvas';
-import { ACCEPT_ID } from './canvas-model';
+import { ACCEPT_ID, TASK_ID } from './canvas-model';
 import { NodeInspector } from './NodeInspector';
 import { Overview } from './Overview';
 import { nodeSpecification, previewImpact } from './inspector-model';
@@ -174,7 +174,6 @@ function Arborun() {
   const active = session?.attempts.filter(a => a.status === 'running' && !a.invalidated && a.revision === session.revision && session.nodes.find(n => n.id === a.nodeId)?.attemptId === a.id) ?? [];
   const editing = inspector?.mode === 'edit' || inspector?.mode === 'add' || Boolean(request);
 
-  const rootId = session?.nodes.find(node => node.parentId === null)?.id;
   const taskActions = session && <div className="task-detail-actions">
     <p className="task-detail-state">v{session.revision} · {phaseNames[session.status]}</p>
     <div className="row">
@@ -219,7 +218,7 @@ function Arborun() {
         {inspector && <NodeInspector key={`${session.id}:${inspector.id}:${inspector.mode}`} session={session} nodeId={inspector.id} mode={inspector.mode} busy={busy} editRevision={inspector.revision}
           onClose={() => { setInspector(undefined); setSelectedId(null); }} onEdit={() => openInspector(inspector.id, 'edit')} onSave={saveNode} onDelete={removeNode} onAdd={id => openInspector(id, 'add')} onAskAi={askAi} onGenerateCases={generateCases} loadArtifact={loadArtifact} onLocate={locate}
           onRecords={() => { setInspector(undefined); setShowRecords(true); }} onResetPosition={id => setResetRequest({ id, key: Date.now() })}
-          taskActions={inspector.mode === 'detail' && (inspector.id === rootId || inspector.id === ACCEPT_ID) ? taskActions : undefined} />}
+          taskActions={inspector.mode === 'detail' && (inspector.id === TASK_ID || inspector.id === ACCEPT_ID) ? taskActions : undefined} />}
         {request && <aside className="side-panel request-panel" aria-label={request.rework ? '返工要求' : 'AI 修改要求'}><div className="panel-head"><h2>{request.completed ? '修改要求已保存' : request.rework ? '要求返工' : '让 AI 修改'}</h2><button className="icon-btn" aria-label="关闭" onClick={() => setRequest(undefined)}>×</button></div>
           <p className="panel-status">范围：{request.target ? `${session.nodes.find(n => n.id === request.target)?.title ?? request.target} 及其下所有内容` : '整个任务'}</p>
           {request.completed ? <section className="continuation"><p>若宿主尚未继续，请把这段指令发送到当前对话。</p><textarea aria-label="发送到当前对话" readOnly value={continuation} rows={7} /></section> : <form onSubmit={e => { e.preventDefault(); void requestAi(); }}><label htmlFor="change-request">{request.rework ? '验收意见' : '说明如何修改执行树'}</label><textarea id="change-request" value={note} onChange={e => setNote(e.target.value)} required rows={6} />

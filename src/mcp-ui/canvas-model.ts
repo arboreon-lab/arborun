@@ -13,6 +13,8 @@ export const NODE_D = 184, CARD_W = NODE_D, CARD_H = NODE_D, FRAME_HEAD = 36, FR
 /** Room outside the circle for the agents' progress ring. */
 export const RING_GAP = 7, RING_W = 4.6;
 export const ACCEPT_ID = '__accept';
+/** The whole task, opened from the title at the top left; not a node in the tree. */
+export const TASK_ID = '__task';
 export const workId = (resultId: string) => `${resultId}::work`;
 
 export interface Camera { x: number; y: number; zoom: number }

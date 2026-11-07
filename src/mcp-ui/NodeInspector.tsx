@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { CaseResult, NodeSpec, NodeState, Proof, Session, TestCase } from '../mcp/schema';
-import { ACCEPT_ID, activeAttempts, agentColor, aggregateStatus, buildView, taskEnds, counts, isContainer, stateLabel, viewDescendants, type ViewNode } from './canvas-model';
+import { ACCEPT_ID, TASK_ID, activeAttempts, agentColor, aggregateStatus, buildView, taskEnds, counts, isContainer, stateLabel, viewDescendants, type ViewNode } from './canvas-model';
 import { currentWork, nodeActivities } from './collaboration-model';
 import { deletionImpact, nodeSpecification, previewImpact, subtreeIds } from './inspector-model';
 import { Avatar, Glyph, MiniBar } from './TreeCanvas';
@@ -241,6 +241,32 @@ function Describe({ node, view, onLocate, fallback }: { node: NodeState; view: M
 }
 const Outcome = ({ node }: { node: NodeState }) => node.result ? <Section><div className={`callout ${node.status === 'failed' ? 'fail' : node.status === 'passed' ? 'pass' : ''}`}><p>{node.result}</p></div></Section> : null;
 
+/** The whole task, opened from the title: where it starts, what it delivers, the stages between, and every test. */
+function WholeTask(props: NodeInspectorProps & { view: Map<string, ViewNode> }) {
+  const { session, view, onLocate } = props;
+  const node = session.nodes.find(n => n.parentId === null)!;
+  const kids = view.get(node.id)?.children ?? [];
+  const testsUnder = (id: string) => viewDescendants(view, id).filter(x => view.get(x)?.node?.kind === 'test');
+    const ends = taskEnds(session), stages = kids.filter(id => id !== ACCEPT_ID), results = session.nodes.filter(n => n.kind === 'result');
+  return <>
+      {props.taskActions && <Section><div className="decision">{props.taskActions}</div></Section>}
+      <Parts
+        describe={<><Describe node={node} view={view} onLocate={onLocate} fallback={node.action || session.goal} />
+          <ol className="path" aria-label="从输入到输出">
+            <li className="end"><span>输入</span></li>
+            {stages.map(id => <li key={id}><button type="button" className="link-chip" onClick={() => onLocate(id)}><Glyph session={session} view={view} id={id} size={13} />{view.get(id)?.title ?? id}</button></li>)}
+            <li className="end"><span>输出 · 用户验收</span></li>
+          </ol>
+          {!!session.clarifications?.length && <details className="fold"><summary>已确认的要求（{session.clarifications.length}）</summary><dl className="qa">{session.clarifications.map((item, index) => <div key={index}><dt>{item.question}</dt><dd>{item.answer}</dd></div>)}</dl></details>}
+          <details className="fold"><summary>Agent 分工（{session.agents.length}）</summary><ul className="agents">{session.agents.map(a => <li key={a.id}><Avatar session={session} agentId={a.id} /><div><strong>{a.name}</strong> · {a.role}<p>负责：{a.scope}</p><p>上限：{a.budget}</p></div></li>)}</ul></details></>}
+        input={<>{ends.input ? <p>{ends.input}</p> : <Unfilled />}
+          {!!session.context.length && <details className="fold"><summary>依据的资料（{session.context.length}）</summary><ul>{session.context.map((item, i) => <li key={i}>{item}</li>)}</ul></details>}</>}
+        output={<><p>{ends.output}</p><p className="note">最后交给你验收</p></>}
+        tests={results.length ? results.map(r => <div key={r.id} className="accept-item"><h4><button type="button" className="link-plain" onClick={() => onLocate(r.id)}><Glyph session={session} view={view} id={r.id} size={14} />{r.title}</button></h4>
+          <TestRows session={session} view={view} ids={testsUnder(r.id)} onLocate={onLocate} /></div>) : <TestRows session={session} view={view} ids={testsUnder(node.id)} onLocate={onLocate} />} />
+    </>;
+  }
+
 /** Every node reads the same way: 描述 on top, 输入 → 输出 side by side, 测试 below. */
 function Parts({ describe, input, output, tests }: { describe: ReactNode; input: ReactNode; output: ReactNode; tests: ReactNode }) {
   return <>
@@ -263,25 +289,14 @@ function Details(props: NodeInspectorProps & { node: NodeState; view: Map<string
   const samples = <Samples node={node} onGenerateCases={props.onGenerateCases} busy={props.busy} />;
 
   if (node.parentId === null) {
-    // The start node stands for the whole path: its input is where the task begins, its output what reaches acceptance.
-    const ends = taskEnds(session), stages = kids.filter(id => id !== ACCEPT_ID), results = session.nodes.filter(n => n.kind === 'result');
-    return <>
-      {props.taskActions && <Section><div className="decision">{props.taskActions}</div></Section>}
-      <Parts
-        describe={<><Describe node={node} view={view} onLocate={onLocate} fallback={node.action || session.goal} />
-          <ol className="path" aria-label="从输入到输出">
-            <li className="end"><span>输入</span></li>
-            {stages.map(id => <li key={id}><button type="button" className="link-chip" onClick={() => onLocate(id)}><Glyph session={session} view={view} id={id} size={13} />{view.get(id)?.title ?? id}</button></li>)}
-            <li className="end"><span>输出 · 用户验收</span></li>
-          </ol>
-          {!!session.clarifications?.length && <details className="fold"><summary>已确认的要求（{session.clarifications.length}）</summary><dl className="qa">{session.clarifications.map((item, index) => <div key={index}><dt>{item.question}</dt><dd>{item.answer}</dd></div>)}</dl></details>}
-          <details className="fold"><summary>Agent 分工（{session.agents.length}）</summary><ul className="agents">{session.agents.map(a => <li key={a.id}><Avatar session={session} agentId={a.id} /><div><strong>{a.name}</strong> · {a.role}<p>负责：{a.scope}</p><p>上限：{a.budget}</p></div></li>)}</ul></details></>}
-        input={<>{ends.input ? <p>{ends.input}</p> : <Unfilled />}
-          {!!session.context.length && <details className="fold"><summary>依据的资料（{session.context.length}）</summary><ul>{session.context.map((item, i) => <li key={i}>{item}</li>)}</ul></details>}</>}
-        output={<><p>{ends.output}</p><p className="note">最后交给你验收</p></>}
-        tests={results.length ? results.map(r => <div key={r.id} className="accept-item"><h4><button type="button" className="link-plain" onClick={() => onLocate(r.id)}><Glyph session={session} view={view} id={r.id} size={14} />{r.title}</button></h4>
-          <TestRows session={session} view={view} ids={testsUnder(r.id)} onLocate={onLocate} /></div>) : <TestRows session={session} view={view} ids={testsUnder(node.id)} onLocate={onLocate} />} />
-    </>;
+    // The start node is only where the path begins: what the task starts from, handed to the first step.
+    const ends = taskEnds(session), first = kids.find(id => id !== ACCEPT_ID);
+    return <Parts
+      describe={<p>任务从这里出发：把下面的输入交给第一步{first && <button type="button" className="link-plain" onClick={() => onLocate(first)}>「{view.get(first)?.title}」</button>}。整个任务的说明请点左上角标题。</p>}
+      input={<>{ends.input ? <p>{ends.input}</p> : <Unfilled />}
+        {!!session.context.length && <details className="fold"><summary>依据的资料（{session.context.length}）</summary><ul>{session.context.map((item, i) => <li key={i}>{item}</li>)}</ul></details>}</>}
+      output={first ? <><p>{view.get(first)?.node?.input || ends.input || '—'}</p><p className="note">交给「{view.get(first)?.title}」</p></> : <Unfilled />}
+      tests={<p className="note">起点不做测试，检查从第一步开始。</p>} />;
   }
   if (isContainer(node)) {
     const result = node.kind === 'result', tests = result ? kids.filter(id => view.get(id)?.node?.kind === 'test') : testsUnder(node.id);
@@ -363,6 +378,13 @@ export function NodeInspector(props: NodeInspectorProps) {
   const status = (id: string) => <><span className={`state-text ${aggregateStatus(session, view, id)}`}>{stateLabel(session, view, id)}</span>
     {(() => { const c = counts(session, view, id); return c.total ? <><MiniBar c={c} /><span>{c.passed} / {c.total} {session.nodes.some(n => n.kind === 'test') ? '项测试通过' : '步完成'}</span></> : null; })()}</>;
 
+  if (nodeId === TASK_ID) {
+    const root = session.nodes.find(n => n.parentId === null);
+    if (!root) return null;
+    return <Shell session={session} view={view} id={root.id} title={session.title} status={status(root.id)} onClose={onClose} busy={busy}>
+      <div data-inspector-mode="task"><WholeTask {...props} view={view} /></div>
+    </Shell>;
+  }
   if (nodeId === ACCEPT_ID) {
     const results = session.nodes.filter(n => n.kind === 'result');
     const reviewing = session.status === 'review';
@@ -387,8 +409,9 @@ export function NodeInspector(props: NodeInspectorProps) {
   const current = session.nodes.find(node => node.id === nodeId);
   const node = current || original;
   if (!node) return null;
-  const title = mode === 'add' ? `添加到「${node.title}」` : mode === 'edit' ? `编辑「${node.title}」` : node.title;
-  const nodeStatus = mode === 'detail' && current ? <>{status(nodeId)}{node.kind === 'test' && <span className={`by ${node.by ?? 'agent'}`}>{node.by === 'user' ? '你设定' : 'Agent 补充'}</span>}
+  const title = mode === 'add' ? `添加到「${node.title}」` : mode === 'edit' ? `编辑「${node.title}」` : node.parentId === null ? '起点' : node.title;
+  // The start node carries no task-wide numbers; those belong to the whole-task view under the title.
+  const nodeStatus = mode === 'detail' && current && node.parentId !== null ? <>{status(nodeId)}{node.kind === 'test' && <span className={`by ${node.by ?? 'agent'}`}>{node.by === 'user' ? '你设定' : 'Agent 补充'}</span>}
     {!isContainer(node) && node.parentId !== null && <span className="agent"><Avatar session={session} agentId={node.agentId} /><span className="name">{session.agents.find(a => a.id === node.agentId)?.name ?? node.agentId}</span></span>}</> : null;
   const menu = mode === 'detail' && current ? <div className="menu-wrap"><button type="button" className="icon-btn" aria-label="节点操作" aria-expanded={menuOpen} aria-haspopup="menu" disabled={busy} onClick={() => setMenuOpen(!menuOpen)}>
     <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></svg></button>

@@ -114,12 +114,11 @@ async function editReadNode(page: Page, text: string) {
 }
 async function rootDetails(page: Page) {
   await closeInspector(page);
-  if (await shell(page).getAttribute('data-scope') !== 'root') {
-    await page.locator('[data-breadcrumb="root"]').click();
-    await expect(shell(page)).toHaveAttribute('data-scope', 'root');
-  }
-  await nodeButton(page, 'CSV 导出').click();
+  // The whole task opens from the title at the top left, from any level.
+  await page.locator('[data-task-title]').click();
+  await expect(shell(page)).toHaveAttribute('data-scope', 'root');
   await expect(inspector(page)).toBeVisible();
+  await expect(inspector(page).locator('[data-inspector-mode="task"]')).toBeVisible();
 }
 async function approve(page: Page, revision: number) {
   await rootDetails(page);
@@ -255,7 +254,8 @@ test('节点菜单编辑、根详情批准、真实 MCP 状态原位更新并在
   const accepted = await current();
   expect(accepted.status).toBe('accepted');
   expect(accepted.nodes.map(node => node.id)).toEqual(beforeIds);
-  await expect(nodeCard(page, 'root')).toHaveAttribute('data-selected', 'true');
+  // Acceptance happens in the whole-task view, which stays open; the tree does not move.
+  await expect(inspector(page).locator('[data-inspector-mode="task"]')).toBeVisible();
   expect(await geometry(page)).toEqual(beforeAccept);
   await page.screenshot({ path: info.outputPath('reference-accepted-expanded.png'), fullPage: true });
 });
@@ -305,7 +305,12 @@ test('长任务：节点完成后，测试里每个样例显示实际结果与�
   expect(created.isError).not.toBe(true);
   sessionId = (created.structuredContent as unknown as { session: Session }).session.id;
   await openTree(page);
-  await nodeButton(page, '训练猫狗照片识别模型').click();
+  // The start node is only where the path begins.
+  await nodeButton(page, '起点').click();
+  await expect(inspector(page)).toContainText('任务从这里出发');
+  await expect(inspector(page).getByRole('button', { name: '批准 v1 并执行', exact: true })).toHaveCount(0);
+  await page.locator('[data-task-title]').click();
+  await expect(inspector(page)).toContainText('最后交给你验收');
   await inspector(page).getByRole('button', { name: '批准 v1 并执行', exact: true }).click();
   await expect(inspector(page).getByRole('button', { name: '暂停执行', exact: true })).toBeVisible();
   // Root reads as the same four parts as every node.

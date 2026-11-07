@@ -2,7 +2,7 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 're
 import type { Session } from '../mcp/schema';
 import {
   ACCEPT_ID, CARD_H, CARD_W, FRAME_HEAD, RING_GAP, RING_W, activeAttempts, agentColor, agentProgress, aggregateStatus, applyOffsets, buildView, counts, fitCamera, initialExpanded,
-  isFolder, layoutTree, stateLabel, taskEnds, viewDescendants, visibleCard, zoomCamera, type Camera, type Counts, type Point, type TreeView, type ViewNode,
+  isFolder, layoutTree, stateLabel, taskEnds, TASK_ID, viewDescendants, visibleCard, zoomCamera, type Camera, type Counts, type Point, type TreeView, type ViewNode,
 } from './canvas-model';
 import { collaborationMessages, currentWork } from './collaboration-model';
 import { SKETCH_M, bez, cardMarkup, edgeMarkup, frameMarkup, glyphMarkup, messageCurve, messageMarkup, ringMarkup, type CardLook, type RingSegment } from './sketch';
@@ -348,19 +348,20 @@ export function TreeCanvas({ session, selectedId, onSelect, onEnter, editing = f
     const ring: RingSegment[] = progress.map(a => ({ agentId: a.agentId, color: agentVar(a.agentId), share: a.total / owned, done: a.done / a.total, running: a.running > 0 }));
     const c = counts(session, view, v.kind === 'accept' ? ACCEPT_ID : id);
     const ends = isRoot ? taskEnds(session) : undefined;
-    const text = ends ? (ends.input ? `${ends.input} → ${ends.output}` : ends.output) : v.kind === 'accept' ? '逐项查看每个效果的测试与证据；全部通过后验收。' : v.kind === 'work' ? `${v.children.length} 个步骤` : n?.action ?? '';
+    const text = ends ? ends.input || '从这里开始' : v.kind === 'accept' ? '逐项查看每个效果的测试与证据；全部通过后验收。' : v.kind === 'work' ? `${v.children.length} 个步骤` : n?.action ?? '';
     const label = stateLabel(session, view, id);
     let meta: React.ReactNode = null;
-    if (isFolder(v) || isRoot || v.kind === 'accept') meta = c.total > 0 && <span className="meta">{c.passed + c.skipped}/{c.total}</span>;
+    if (isRoot) meta = null;
+    else if (isFolder(v) || v.kind === 'accept') meta = c.total > 0 && <span className="meta">{c.passed + c.skipped}/{c.total}</span>;
     else if (n?.kind === 'test') meta = <span className={`by ${n.by ?? 'agent'}`}>{n.by === 'user' ? '你设定' : 'Agent 补充'}</span>;
     return <div key={id} className={['node', folded && 'group collapsed', isRoot && 'start', v.kind === 'accept' && 'end', quiet && 'work', dragging === id && 'dragging', impact?.has(id) && 'impacted'].filter(Boolean).join(' ')}
       role="treeitem" tabIndex={-1} data-id={id} data-node={id} data-node-id={id} data-kind={v.kind} data-state={status} data-status={status} data-running={Boolean(attempt)} data-live={Boolean(attempt)} data-look={JSON.stringify(look)}
       data-agents={progress.map(a => `${a.agentId}:${a.done}/${a.total}`).join(' ')}
-      aria-selected={selected} aria-label={`${v.title}，${label}`} data-selected={selected}
+      aria-selected={selected} aria-label={`${isRoot ? '起点' : v.title}，${label}`} data-selected={selected}
       style={{ left: p.x - CARD_W / 2, top: p.y - CARD_H / 2, ...(attempt ? { '--agent': agentVar(attempt.agentId) } : {}) } as React.CSSProperties}>
       <svg className="sketch" viewBox={`0 0 ${CARD_W + SKETCH_M * 2} ${CARD_H + SKETCH_M * 2}`} aria-hidden="true" dangerouslySetInnerHTML={{ __html: cardMarkup(id, look) }} />
       {ring.length > 0 && <svg className="ring" viewBox={`0 0 ${CARD_W + SKETCH_M * 2} ${CARD_H + SKETCH_M * 2}`} aria-hidden="true" dangerouslySetInnerHTML={{ __html: ringMarkup(id, ring) }} />}
-      <div className="head"><span className="title">{v.title}</span></div>
+      <div className="head"><span className="title">{isRoot ? '起点' : v.title}</span></div>
       <div className="body">
         {attempt ? <span className="doing" title={act?.summary}>{act?.summary ?? `${agentName(attempt.agentId)} 已领取`}</span> : <span className="text">{text}</span>}
       </div>
@@ -372,7 +373,10 @@ export function TreeCanvas({ session, selectedId, onSelect, onEnter, editing = f
   return <section className="arborun-canvas-shell" data-view={treeView} data-scope={scope} aria-label="决策执行树">
     <header className="topbar">
       <nav className="crumbs" aria-label="当前子树路径">{path.map((n, i) => <React.Fragment key={n.id}>{i > 0 && <span className="sep" aria-hidden="true">/</span>}
-        <button type="button" data-breadcrumb={n.id} aria-current={n.id === scope ? 'page' : undefined} onClick={() => n.id === scope ? !blocked() && onSelect(n.id) : enter(n.id, true)}>{n.title}</button></React.Fragment>)}</nav>
+        {i === 0
+          // The title is the whole task: it returns to the top level and opens the task's own details.
+          ? <button type="button" data-breadcrumb={n.id} data-task-title aria-current={n.id === scope ? 'page' : undefined} title="查看整个任务" onClick={() => { if (blocked()) return; if (n.id !== scope) enter(n.id, true); onSelect(TASK_ID); }}>{session.title}</button>
+          : <button type="button" data-breadcrumb={n.id} aria-current={n.id === scope ? 'page' : undefined} onClick={() => n.id === scope ? !blocked() && onSelect(n.id) : enter(n.id, true)}>{n.title}</button>}</React.Fragment>)}</nav>
       <div className="tools">
         {onOverview
           ? <button type="button" className="tool" data-fold aria-label="折叠为概览" title="折叠为概览" onClick={() => { if (!blocked()) onOverview(); }}>{ICON.fold}</button>
