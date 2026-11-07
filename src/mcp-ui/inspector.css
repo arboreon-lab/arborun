@@ -79,10 +79,31 @@
 .case-group h4 { display: flex; align-items: baseline; gap: 8px; margin: 0 0 4px; }
 .case-group[data-case-kind="boundary"] h4 { color: var(--wait); }
 .case-group[data-case-kind="extreme"] h4 { color: var(--fail); }
-.cases { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
-.cases li { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 8px; align-items: start; padding: 5px 9px; border: 1.2px solid var(--line); border-radius: var(--wobble-2); font-size: 14px; }
+.cases { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.cases > li { padding: 6px 9px; border: 1.2px solid var(--line); border-radius: var(--wobble-2); font-size: 14px; }
+.cases > li[data-result="passed"] { border-color: color-mix(in srgb, var(--pass) 45%, var(--line)); }
+.cases > li[data-result="failed"] { border-color: var(--fail); background: var(--fail-soft); }
+.case-line { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto; gap: 8px; align-items: start; }
 .cases .in { color: var(--ink); overflow-wrap: anywhere; }
 .cases .arrow { color: var(--faint); }
 .cases .out { color: var(--ink-2); overflow-wrap: anywhere; }
+.cases .verdict { white-space: nowrap; font-size: 13px; color: var(--faint); }
+.cases li[data-result="passed"] .verdict { color: var(--pass); font-weight: 700; }
+.cases li[data-result="failed"] .verdict { color: var(--fail); font-weight: 700; }
+.case-result { margin-top: 6px; padding-top: 6px; border-top: 1.2px dashed var(--line); display: grid; gap: 8px; }
+.case-result .actual { color: var(--ink-2); }
+.proof { margin: 0; display: grid; gap: 4px; min-width: 0; }
+.proof figcaption { font-size: 13px; color: var(--muted); }
+.proof .term { margin: 0; padding: 8px 10px; background: #070706; border: 1.2px solid var(--line); border-radius: 6px; font: 12.5px/1.5 var(--mono); color: #d9d3c2; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 220px; overflow: auto; }
+.proof .term .prompt { color: var(--pass); }
+.proof a { color: var(--ink-2); overflow-wrap: anywhere; }
+.media { display: block; max-width: 100%; max-height: 240px; border: 1.2px solid var(--line); border-radius: 6px; background: #000; cursor: zoom-in; }
+video.media { width: 100%; cursor: auto; }
+.media.zoomed { position: fixed; inset: 4vh 4vw; z-index: 50; max-width: 92vw; max-height: 92vh; margin: auto; object-fit: contain; cursor: zoom-out; box-shadow: 0 0 0 100vmax rgba(0, 0, 0, .82); }
+.evidence h4 { margin-top: 12px; }
+.fold summary { cursor: pointer; color: var(--muted); margin-top: 8px; }
+.test-row .n { font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+.editor h4.part { margin: 14px 0 -2px; font-size: 15px; color: var(--ink); }
+.editor h4.part:first-of-type { margin-top: 4px; }
 .cases-edit { border: 1.4px dashed var(--line-strong); border-radius: var(--wobble-2); padding: 8px 10px; display: grid; gap: 6px; }
 .cases-edit legend { color: var(--muted); font-size: 13.5px; padding: 0 4px; }

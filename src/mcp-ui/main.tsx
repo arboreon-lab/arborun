@@ -10,6 +10,7 @@ import { nodeSpecification, previewImpact } from './inspector-model';
 import './styles.css';
 
 const bridge = new TreeBridge();
+const loadArtifact = (id: string) => bridge.artifact(id);
 const EXPANDED_HEIGHT = 640;
 const phaseNames: Record<Session['status'], string> = {
   draft: '待批准', approved: '已批准', running: '执行中', paused: '已暂停', review: '待验收', accepted: '用户已验收',
@@ -216,7 +217,7 @@ function Arborun() {
           editing={editing} locateRequest={locateRequest} resetRequest={resetRequest} panelOpen={Boolean(inspector || request || showRecords)}
           impact={inspector?.mode === 'edit' && session.nodes.some(n => n.id === inspector.id) ? new Set(previewImpact(session, specs(session.nodes).find(n => n.id === inspector.id)!).map(n => n.id)) : undefined} />
         {inspector && <NodeInspector key={`${session.id}:${inspector.id}:${inspector.mode}`} session={session} nodeId={inspector.id} mode={inspector.mode} busy={busy} editRevision={inspector.revision}
-          onClose={() => { setInspector(undefined); setSelectedId(null); }} onEdit={() => openInspector(inspector.id, 'edit')} onSave={saveNode} onDelete={removeNode} onAdd={id => openInspector(id, 'add')} onAskAi={askAi} onGenerateCases={generateCases} onLocate={locate}
+          onClose={() => { setInspector(undefined); setSelectedId(null); }} onEdit={() => openInspector(inspector.id, 'edit')} onSave={saveNode} onDelete={removeNode} onAdd={id => openInspector(id, 'add')} onAskAi={askAi} onGenerateCases={generateCases} loadArtifact={loadArtifact} onLocate={locate}
           onRecords={() => { setInspector(undefined); setShowRecords(true); }} onResetPosition={id => setResetRequest({ id, key: Date.now() })}
           taskActions={inspector.mode === 'detail' && (inspector.id === rootId || inspector.id === ACCEPT_ID) ? taskActions : undefined} />}
         {request && <aside className="side-panel request-panel" aria-label={request.rework ? '返工要求' : 'AI 修改要求'}><div className="panel-head"><h2>{request.completed ? '修改要求已保存' : request.rework ? '要求返工' : '让 AI 修改'}</h2><button className="icon-btn" aria-label="关闭" onClick={() => setRequest(undefined)}>×</button></div>

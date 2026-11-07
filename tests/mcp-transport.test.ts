@@ -4,6 +4,10 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { request as httpRequest, type Server } from 'node:http';
 import { ArborunRuntime } from '../src/mcp/server';
+import { ArtifactStore } from '../src/mcp/artifacts';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { ArborunSnapshot, ProposeInput, Session } from '../src/mcp/schema';
 
 const HTML = '<!doctype html><html lang="zh"><body>Arborun tree</body></html>';
@@ -78,7 +82,7 @@ describe('Arborun MCP transport and persistence boundary', () => {
     const { client, call } = await connection();
     const { tools } = await client.listTools();
     expect(tools.map(tool => tool.name).sort()).toEqual([
-      'arborun_activity', 'arborun_claim', 'arborun_plan', 'arborun_read', 'arborun_report', 'arborun_submit', 'arborun_user',
+      'arborun_activity', 'arborun_artifact', 'arborun_claim', 'arborun_plan', 'arborun_read', 'arborun_report', 'arborun_submit', 'arborun_user',
     ]);
     const read = tools.find(tool => tool.name === 'arborun_read')!;
     expect(read._meta).toMatchObject({
@@ -86,6 +90,7 @@ describe('Arborun MCP transport and persistence boundary', () => {
       'openai/ui': { entrypoints: [{ type: 'thread' }] },
     });
     expect(tools.find(tool => tool.name === 'arborun_user')?._meta).toMatchObject({ ui: { visibility: ['app'] } });
+    expect(tools.find(tool => tool.name === 'arborun_artifact')?._meta).toMatchObject({ ui: { visibility: ['app'] } });
     expect(tools.find(tool => tool.name === 'arborun_claim')?._meta).toMatchObject({ ui: { visibility: ['model'] } });
     // Raw MCP lists metadata; the host is responsible for filtering model/app audiences.
     const resource = await client.readResource({ uri: 'ui://arborun/tree.html' });
@@ -238,5 +243,45 @@ describe('Arborun MCP transport and persistence boundary', () => {
     });
     expect(approved.status).toBe(200);
     expect(session(await call('arborun_read', { sessionId: task.id })).status).toBe('approved');
+  });
+
+  test('each sample reports what happened with readable proof; screenshots are stored and shown only to the panel', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'arborun-proof-'));
+    cleanup.push(() => rm(dir, { recursive: true, force: true }));
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
+    await writeFile(join(dir, 'shot.png'), png);
+    await writeFile(join(dir, 'fake.png'), 'not an image');
+    const { call } = await connection({ artifacts: new ArtifactStore(join(dir, 'store')) });
+    const withCases = plan();
+    withCases.nodes[1] = { ...withCases.nodes[1], cases: [
+      { kind: 'normal', input: '标准接口说明', expected: '找到 UTF-8' },
+      { kind: 'extreme', input: '说明是空文件', expected: '报告阻塞' },
+    ] };
+    const proposed = await call('arborun_plan', withCases as unknown as Record<string, unknown>);
+    const task = session(proposed);
+    await call('arborun_user', { uiToken: token(proposed), action: { type: 'approve', sessionId: task.id, expectedRevision: 1 } });
+    const grant = claims(await call('arborun_claim', { sessionId: task.id, revision: 1, nodeId: 'read', agentId: 'main' }));
+    const report = (status: string, caseResults: unknown[], eventId: string) => call('arborun_report', { sessionId: task.id, ...grant, eventId, status,
+      summary: '已核对', evidence: [], checks: status === 'passed' ? [{ criterion: '找到明确编码要求', passed: true, evidence: 'grep 输出' }] : [], caseResults });
+    const normal = { case: 0, passed: true, actual: '第 3 行写着 UTF-8', proof: [
+      { kind: 'command', command: 'grep -n UTF 接口说明.md', output: '3: 编码：UTF-8' },
+      { kind: 'image', path: join(dir, 'shot.png'), caption: '接口说明截图' },
+    ] };
+    // A file that is not really an image is refused before anything is stored.
+    const fake = await report('progress', [{ ...normal, proof: [{ kind: 'image', path: join(dir, 'fake.png') }] }], 'e0');
+    expect(fake.isError).toBe(true);
+    expect(JSON.stringify(fake.content)).toContain('只支持');
+    // Sample results may arrive one at a time; passing needs every sample.
+    const progress = session(await report('progress', [normal], 'e1'));
+    const stored = progress.nodes.find(n => n.id === 'read')!.caseResults![0].proof[1];
+    expect(stored.artifact).toMatch(/^[0-9a-f]{64}\.png$/);
+    expect(stored.path).toBe(join(dir, 'shot.png'));
+    expect((await report('passed', [], 'e2')).isError).toBe(true);
+    const done = session(await report('passed', [{ case: 1, passed: true, actual: '空文件时停下并提示缺少说明', proof: [{ kind: 'text', output: '已报告阻塞' }] }], 'e3'));
+    expect(done.nodes.find(n => n.id === 'read')!.caseResults!.map(r => r.case)).toEqual([0, 1]);
+    // Only the panel, holding the user token, can load the stored file.
+    expect((await call('arborun_artifact', { uiToken: 'wrong', id: stored.artifact })).isError).toBe(true);
+    const file = await call('arborun_artifact', { uiToken: token(proposed), id: stored.artifact });
+    expect(file.structuredContent).toMatchObject({ mimeType: 'image/png', data: png.toString('base64') });
   });
 });

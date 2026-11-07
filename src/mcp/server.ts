@@ -3,7 +3,8 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { getUiCapability, registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
 import { z } from 'zod';
-import { ArborunService } from './core';
+import { ArborunService, planGaps } from './core';
+import { ArtifactStore } from './artifacts';
 import { activitySchema, proposeSchema, claimSchema, reportSchema, submitSchema, userActionSchema, type ArborunSnapshot, type Session } from './schema';
 
 const RESOURCE = 'ui://arborun/tree.html';
@@ -18,6 +19,8 @@ export interface RuntimeOptions {
   html: string;
   /** Opens the local panel for hosts that cannot render MCP Apps. Returns whether it was opened. */
   openUrl?: (url: string) => boolean;
+  /** Where reported screenshots and recordings are kept. Without it, media paths are recorded as text only. */
+  artifacts?: ArtifactStore;
 }
 
 export class ArborunRuntime {
@@ -30,7 +33,7 @@ export class ArborunRuntime {
   constructor(private readonly options: RuntimeOptions) {
     this.service = new ArborunService(options.snapshot, { recover: true });
     this.mcp = new McpServer({ name: 'arborun', version: '0.2.3' }, {
-      instructions: 'Arborun coordinates a user-editable execution tree, built around what the user will check. Before proposing a plan, ask the user in the normal conversation to resolve missing requirements and decisions; record confirmed answers in clarifications and never put unanswered requirements into the tree. Plan with the root children as the trunk in order; put each visible outcome in a kind=result node, with kind=test nodes under it ("when ..., you should see ...", by=user for tests the user stated or confirmed, by=agent for tests you add) and the action nodes that implement it. Each action/test states target, input, output, a one-paragraph mapping of how the input becomes the output, constraints, acceptance and failure route, and generate cases: concrete samples with at least one normal value, one boundary case and one extreme case, each with input and expected output. Write every field briefly in plain everyday words a non-expert can follow: short sentences, no jargon or code terms unless the user used them; mapping is one or two sentences covering how and what to watch for; never repeat the same point in two fields. Show the tree and stop for the user to approve it in the Arborun panel; never approve or accept for the user and never use browser automation on the panel. After approval read the latest revision, claim each node before acting, do the work with your own tools, report actual evidence and checks, report observable actions and messages through arborun_activity, then submit the results tree for human acceptance. Continue normal conversation output. A changed plan revokes approval; do not continue with old claims. If the host cannot show the panel, Arborun opens it in the local browser.',
+      instructions: 'Arborun is for large, open-ended, loosely specified work that cannot be done in one pass, such as training a model or writing a research paper. It keeps that work as a user-editable tree the person checks by results, not by code. Before proposing a plan, ask the user in the normal conversation to resolve missing requirements and decisions; record confirmed answers in clarifications and never put unanswered requirements into the tree. Break the work into stages (root children, in order) whose outcomes a person can check; put each checkable outcome in a kind=result node, with kind=test nodes under it ("when ..., you should see ...", by=user for tests the user stated or confirmed, by=agent for tests you add) and the action nodes that produce it. Every node, the root included, reads as four parts: input, output, description (mapping: one or two sentences on how the input becomes the output; constraints for what to watch for) and tests. Each action/test also states target, acceptance and failure route, and generated cases: concrete samples with at least one normal, one boundary and one extreme case, each with input and expected output. Write every field briefly in plain everyday words a non-expert can follow: short sentences, no jargon unless the user used it; never repeat the same point in two fields. Show the tree and stop for the user to approve it in the Arborun panel; never approve or accept for the user and never use browser automation on the panel. After approval read the latest revision, claim each node before acting, do the work with your own tools, and report through arborun_report: for every sample a caseResults entry with what actually happened and proof a person can read without opening code - the command you ran and its output, a screenshot, a short demo recording (local file paths; Arborun stores them), plain text or a link. Report observable actions and messages through arborun_activity, then submit the results tree for human acceptance. Continue normal conversation output. A changed plan revokes approval; do not continue with old claims. If the host cannot show the panel, Arborun opens it in the local browser.',
     });
     this.register();
   }
@@ -98,17 +101,26 @@ export class ArborunRuntime {
       inputSchema: readSchema, annotations: { readOnlyHint: true, openWorldHint: false }, _meta: uiMeta,
     }, safe(async args => this.result(await this.read(args.sessionId, args.afterSequence))));
     registerAppTool(this.mcp, 'arborun_plan', {
-      title: '生成或修改执行树', description: 'Ask unresolved requirement questions in the normal host conversation first, then propose a concrete tree from confirmed requirements and relevant context. Provide confirmed question/answer records in clarifications; unanswered records are rejected without creating or changing a tree. Organise the tree around what the user will check: the children of the root are the trunk in order; put each visible outcome in a kind=result node whose action states the effect, and under it kind=test nodes ("当……时，应该看到……", with by=user for tests the user stated or confirmed, by=agent for tests you add) plus the action nodes that implement it. Each action/test needs target, input, output, mapping (one paragraph: how the input becomes the output), constraints, acceptance and failure route, plus generated cases with kind normal, boundary and extreme (at least one of each; concrete input and expected output). Keep every text short, in plain words a non-expert understands, and say each point once. Tests the user set cannot be changed or removed by a plan update. Parent is containment; dependsOn is execution dependency. Conditional nodes use when; each planned agent has role/scope/budget. Updating requires expectedRevision and always revokes old approval. Then show UI and wait for the user.',
+      title: '生成或修改执行树', description: 'Ask unresolved requirement questions in the normal host conversation first, then propose a concrete tree from confirmed requirements and relevant context. Provide confirmed question/answer records in clarifications; unanswered records are rejected without creating or changing a tree. Arborun is for large, open-ended work that cannot be done in one pass (train a model, write a paper). Organise the tree around what the user will check: the children of the root are the stages in order; put each checkable outcome in a kind=result node whose action states the effect, and under it kind=test nodes ("当……时，应该看到……", with by=user for tests the user stated or confirmed, by=agent for tests you add) plus the action nodes that implement it. Every node, the root included, has input, output and mapping (one or two sentences: how the input becomes the output) plus constraints. Each action/test also needs target, acceptance and failure route, plus generated cases with kind normal, boundary and extreme (at least one of each; concrete input and expected output). Keep every text short, in plain words a non-expert understands, and say each point once. Tests the user set cannot be changed or removed by a plan update. Parent is containment; dependsOn is execution dependency. Conditional nodes use when; each planned agent has role/scope/budget. Updating requires expectedRevision and always revokes old approval. Then show UI and wait for the user.',
       inputSchema: proposeSchema, annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false }, _meta: { ui: { resourceUri: RESOURCE }, 'openai/ui': display },
-    }, safe(async args => this.result({ session: await this.mutate(s => s.propose(args)) })));
+    }, safe(async args => {
+      const reply = this.result({ session: await this.mutate(s => s.propose(args)) });
+      const gaps = planGaps((reply.structuredContent.session as Session).nodes);
+      // Tell the agent, not the user, which parts are still blank so it can fill them before asking for approval.
+      if (gaps.length) reply.content[0].text += `\n\n还没写全的部分（每个节点都应有输入、输出、描述和测试；请用 arborun_plan 补全后再请用户批准）：\n${gaps.slice(0, 20).map(g => `- ${g}`).join('\n')}${gaps.length > 20 ? `\n- 另有 ${gaps.length - 20} 个节点` : ''}`;
+      return reply;
+    }));
     registerAppTool(this.mcp, 'arborun_claim', {
       title: '领取执行节点', description: 'Claim an approved, ready node for its declared agent immediately before actual host work. Returns attemptId and claimToken; do not perform work when rejected. Registration in a plan is not creation of a real subagent. Use host agent tools to create workers only after corresponding approval.',
       inputSchema: claimSchema, annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false }, _meta: { ui: { visibility: ['model'] } },
     }, safe(async args => this.result(await this.mutate(s => s.claim(args)))));
     registerAppTool(this.mcp, 'arborun_report', {
-      title: '记录执行进度与结果', description: 'Report actual host work for the claimed attempt using claimToken and unique eventId. Include evidence and checks matching every acceptance criterion before passed. Condition must report true/false/unknown explicitly. Evidence is agent-reported, never automatically host-verified. Late results go to history; read current tree before continuing.',
+      title: '记录执行进度与结果', description: 'Report actual host work for the claimed attempt using claimToken and unique eventId. Include evidence and checks matching every acceptance criterion before passed. For each sample in the node\'s cases (case = its 0-based position) add a caseResults entry: passed, actual (what really happened, in plain words) and proof a person can read without code - kind=command with the command and its output (last part is enough), kind=image or kind=video with an absolute local path to a PNG/JPEG/GIF/WebP screenshot or a short MP4/WebM/GIF demo (Arborun copies the file), kind=text, or kind=link. Progress reports may add sample results one at a time. passed requires every sample reported, all passed, each with proof. Condition must report true/false/unknown explicitly. Evidence is agent-reported, never automatically host-verified. Late results go to history; read current tree before continuing.',
       inputSchema: reportSchema, annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false }, _meta: { ui: { visibility: ['model'] } },
-    }, safe(async args => this.result({ session: await this.mutate(s => s.report(args)) })));
+    }, safe(async args => {
+      const caseResults = this.options.artifacts ? await this.options.artifacts.storeProofs(args.caseResults) : args.caseResults;
+      return this.result({ session: await this.mutate(s => s.report({ ...args, ...(caseResults ? { caseResults } : {}) })) });
+    }));
     registerAppTool(this.mcp, 'arborun_activity', {
       title: '记录 Agent 动作与消息', description: 'Observe actual host actions and inter-agent messages for a current approved running attempt. Authenticate with its claimToken and unique eventId. action records observable work, never private reasoning; runtimeAgentId identifies the actual host instance as an agent-reported label. After a real host message send, record message_sent with a unique messageId and declared recipient; only that recipient can record message_received using its own active claim. This tool does not send messages, start agents, infer delivery, or replace normal Codex conversation output. Old/invalid attempts are rejected.',
       inputSchema: activitySchema, annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false }, _meta: { ui: { visibility: ['model'] } },
@@ -122,6 +134,16 @@ export class ArborunRuntime {
       title: '提交验收树', description: 'When all applicable nodes pass with evidence, generate final acceptance tree from the same node IDs. This does not accept on behalf of the user. Any unresolved or running node prevents completion.',
       inputSchema: submitSchema, annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false }, _meta: { ui: { resourceUri: RESOURCE }, 'openai/ui': display },
     }, safe(async args => this.result({ session: await this.mutate(s => s.submit(args)) })));
+    registerAppTool(this.mcp, 'arborun_artifact', {
+      title: '读取证据文件', description: 'App-only: load a stored screenshot or demo recording for display. Do not invoke from the model.',
+      inputSchema: z.object({ uiToken: z.string(), id: z.string() }).strict(),
+      annotations: { readOnlyHint: true, openWorldHint: false }, _meta: { ui: { visibility: ['app'], resourceUri: RESOURCE } },
+    }, safe(async ({ uiToken, id }) => {
+      if (!this.authorized(uiToken)) throw new Error('此操作需要树界面的用户操作凭证。');
+      if (!this.options.artifacts) throw new Error('此服务未保存证据文件。');
+      const file = await this.options.artifacts.read(id);
+      return { content: [{ type: 'text' as const, text: `证据文件 ${id}` }], structuredContent: file };
+    }));
     registerAppTool(this.mcp, 'arborun_user', {
       title: '树的用户操作', description: 'App-only user gestures: edit plan, request AI changes, approve current revision, pause, accept or return results. Do not invoke from the model.',
       inputSchema: z.object({ uiToken: z.string(), action: userActionSchema }).strict(),
@@ -144,7 +166,7 @@ export class ArborunRuntime {
       const url = new URL(request.url ?? '/', origin);
       if (url.pathname === '/' && request.method === 'GET') {
         response.setHeader('Content-Type', 'text/html; charset=utf-8');
-        response.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; font-src data:; frame-ancestors 'self'");
+        response.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; media-src 'self' data:; font-src data:; frame-ancestors 'self'");
         response.end(this.options.html); return;
       }
       if (!this.authorized(request.headers.authorization?.replace(/^Bearer /, ''))) {
@@ -154,6 +176,10 @@ export class ArborunRuntime {
       try {
         if (url.pathname === '/api/read' && request.method === 'GET') {
           response.end(JSON.stringify(await this.read(url.searchParams.get('sessionId') ?? undefined))); return;
+        }
+        if (url.pathname === '/api/artifact' && request.method === 'GET') {
+          if (!this.options.artifacts) throw new Error('此服务未保存证据文件。');
+          response.end(JSON.stringify(await this.options.artifacts.read(url.searchParams.get('id') ?? ''))); return;
         }
         if (url.pathname === '/api/user' && request.method === 'POST') {
           const body = await readBody(request);

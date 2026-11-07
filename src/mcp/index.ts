@@ -5,6 +5,7 @@ import { homedir, platform } from 'node:os';
 import { spawn } from 'node:child_process';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { SnapshotFile } from './persistence';
+import { ArtifactStore } from './artifacts';
 import { ArborunRuntime } from './server';
 
 if (process.argv[2] === 'install') {
@@ -36,7 +37,7 @@ async function stop() {
 
 try {
   await data.acquire();
-  runtime = new ArborunRuntime({ snapshot: await data.load(), save: value => data.save(value), openUrl,
+  runtime = new ArborunRuntime({ snapshot: await data.load(), save: value => data.save(value), openUrl, artifacts: new ArtifactStore(join(data.directory, 'artifacts')),
     html: await readFile(join(dirname(fileURLToPath(import.meta.url)), 'tree.html'), 'utf8') });
   await runtime.persistRecovery();
   const portArg = process.argv.indexOf('--port');

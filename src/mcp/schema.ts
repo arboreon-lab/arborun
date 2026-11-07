@@ -33,12 +33,38 @@ export const proposeSchema = z.object({
   sessionId: id.optional(), expectedRevision: revision.optional(), ...planFields,
 }).strict();
 export const claimSchema = z.object({ sessionId: id, revision, nodeId: id, agentId: id }).strict();
+/**
+ * Proof a person can read without opening code: a command and what it printed, a screenshot, a short demo recording,
+ * plain text or a link. Image and video files are given by local path; Arborun copies them into its own store.
+ */
+export const ARTIFACT_ID = /^[0-9a-f]{64}\.(png|jpg|gif|webp|mp4|webm)$/;
+export const proofSchema = z.object({
+  kind: z.enum(['command', 'image', 'video', 'text', 'link']),
+  caption: z.string().trim().max(300).optional(),
+  command: z.string().trim().max(2000).optional(),
+  output: z.string().max(100000).optional(),
+  path: z.string().trim().max(2000).optional(),
+  url: z.string().trim().max(2000).regex(/^https?:\/\//, '链接需以 http(s):// 开头').optional(),
+  artifact: z.string().regex(ARTIFACT_ID).optional(),
+}).strict().superRefine((p, ctx) => {
+  const need = (ok: boolean, message: string) => { if (!ok) ctx.addIssue({ code: 'custom', message }); };
+  if (p.kind === 'command') need(Boolean(p.command), '命令行证据需要 command（以及它的输出 output）');
+  if (p.kind === 'text') need(Boolean(p.output?.trim()), '文字证据需要 output');
+  if (p.kind === 'link') need(Boolean(p.url), '链接证据需要 url');
+  if (p.kind === 'image' || p.kind === 'video') need(Boolean(p.path || p.url || p.artifact), '截图或录像需要本地文件 path 或 url');
+});
+/** The outcome of one test sample, by its position in the node's cases. */
+export const caseResultSchema = z.object({
+  case: z.number().int().nonnegative(), passed: z.boolean(), actual: text,
+  proof: z.array(proofSchema).max(8).default([]),
+}).strict();
 export const reportSchema = z.object({
   sessionId: id, attemptId: id, claimToken: id, eventId: id,
   status: z.enum(['progress', 'passed', 'failed', 'blocked']), summary: text,
   evidence: z.array(text).max(50).default([]),
   checks: z.array(z.object({ criterion: text, passed: z.boolean(), evidence: text }).strict()).max(30).default([]),
   conditionOutcome: z.union([z.boolean(), z.literal('unknown')]).optional(),
+  caseResults: z.array(caseResultSchema).max(30).default([]),
 }).strict();
 const activityBase = { sessionId: id, attemptId: id, claimToken: id, eventId: id, summary: text, runtimeAgentId: id.optional() };
 export const activitySchema = z.discriminatedUnion('kind', [
@@ -61,6 +87,8 @@ export const userActionSchema = z.discriminatedUnion('type', [
 
 export type NodeSpec = z.infer<typeof nodeSchema>;
 export type TestCase = z.infer<typeof caseSchema>;
+export type Proof = z.infer<typeof proofSchema>;
+export type CaseResult = z.infer<typeof caseResultSchema>;
 export type AgentSpec = z.infer<typeof agentSchema>;
 export type ProposeInput = z.input<typeof proposeSchema>;
 export type ClaimInput = z.input<typeof claimSchema>;
@@ -72,6 +100,7 @@ export type UserActionInput = z.input<typeof userActionSchema>;
 export type NodeStatus = 'draft' | 'ready' | 'running' | 'passed' | 'failed' | 'blocked' | 'skipped' | 'stale';
 export interface NodeState extends NodeSpec {
   status: NodeStatus; result?: string; evidence?: string[]; conditionOutcome?: boolean | 'unknown'; attemptId?: string;
+  caseResults?: CaseResult[];
 }
 export interface Approval { id: string; revision: number; hash: string; at: string }
 export interface AttemptView {
@@ -80,6 +109,7 @@ export interface AttemptView {
   startedAt: string; endedAt?: string; invalidated?: boolean;
   summary?: string; evidence: string[]; checks: { criterion: string; passed: boolean; evidence: string }[];
   conditionOutcome?: boolean | 'unknown'; lateStatus?: 'passed' | 'failed' | 'blocked';
+  caseResults?: CaseResult[];
   provenance: 'agent_reported';
 }
 export interface ArborunEvent {

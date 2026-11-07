@@ -117,6 +117,19 @@ export function assertUserTestsKept(previous: NodeSpec[], next: NodeSpec[]): voi
   }
 }
 
+/** Which of the four parts (input, output, description, tests) a plan still leaves blank, per node, in plain words. */
+export function planGaps(nodes: NodeSpec[]): string[] {
+  const names = { normal: '正常情况', boundary: '边界情况', extreme: '极端情况' } as const;
+  return nodes.flatMap(node => {
+    const missing: string[] = [];
+    if (!node.input.trim()) missing.push('输入');
+    if (!(node.output || (node.kind === 'result' && node.action.trim()))) missing.push('输出');
+    if (!node.mapping) missing.push('描述');
+    if (!isContainer(node)) for (const [kind, name] of Object.entries(names)) if (!node.cases?.some(c => c.kind === kind)) missing.push(`${name}样例`);
+    return missing.length ? [`「${node.title}」（${node.id}）：缺${missing.join('、')}`] : [];
+  });
+}
+
 export class ArborunService {
   private state: ArborunSnapshot;
   constructor(snapshot?: ArborunSnapshot, options: { recover?: boolean } = {}) {
@@ -282,7 +295,7 @@ export class ArborunService {
       const attempt: AttemptView = { id: attemptId, nodeId: node.id, agentId: parsed.agentId, revision: task.revision, approvalId: task.approval!.id,
         specification: spec(node), status: 'running', startedAt: now(), evidence: [], checks: [], provenance: 'agent_reported' };
       task.attempts.push(attempt); task.status = 'running';
-      node.status = 'running'; node.attemptId = attemptId; node.result = undefined; node.evidence = []; node.conditionOutcome = undefined;
+      node.status = 'running'; node.attemptId = attemptId; node.result = undefined; node.evidence = []; node.conditionOutcome = undefined; node.caseResults = undefined;
       this.event(task, 'node_started', `${node.title}：宿主 Agent 已领取，等待实际执行记录。`, 'agent_reported', { nodeId: node.id, agentId: parsed.agentId, attemptId });
     });
     this.state.grants.push({ attemptId, token: claimToken });
@@ -290,6 +303,8 @@ export class ArborunService {
   }
   report(input: ReportInput): Session {
     const parsed = reportSchema.parse(input), digest = hash(parsed);
+    // Long command output keeps its last part: that is where results and errors appear.
+    for (const r of parsed.caseResults) for (const p of r.proof) if (p.output && p.output.length > 8000) p.output = `…（前面省略 ${p.output.length - 8000} 字）\n${p.output.slice(-8000)}`;
     return this.transaction(parsed.sessionId, session => {
       const duplicate = session.events.find(event => event.id === parsed.eventId);
       if (duplicate) {
@@ -303,8 +318,16 @@ export class ArborunService {
       if (attempt.lateStatus) throw new Error('失效执行的最终结果已记录');
       const node = session.nodes.find(n => n.id === attempt.nodeId);
       const outdated = Boolean(attempt.invalidated || attempt.revision !== session.revision || session.approval?.id !== attempt.approvalId);
+      const cases = attempt.specification.cases ?? [];
+      if (new Set(parsed.caseResults.map(r => r.case)).size !== parsed.caseResults.length) throw new Error('同一个测试样例只能上报一个结果');
+      if (parsed.caseResults.some(r => r.case >= cases.length)) throw new Error('测试样例编号超出范围：从 0 开始，按 cases 的顺序');
+      // Progress reports may add sample results one at a time; a later result for the same sample replaces the earlier one.
+      const merged = [...(attempt.caseResults ?? []).filter(r => !parsed.caseResults.some(n => n.case === r.case)), ...clone(parsed.caseResults)].sort((a, b) => a.case - b.case);
       if (!outdated && parsed.status === 'passed') {
-        if (parsed.evidence.length === 0) throw new Error('通过节点需要提交证据');
+        if (parsed.evidence.length === 0 && !merged.some(r => r.proof.length)) throw new Error('通过节点需要提交证据');
+        if (cases.some((_, i) => !merged.some(r => r.case === i))) throw new Error('通过前需要上报每个测试样例的结果');
+        if (merged.some(r => !r.passed)) throw new Error('有测试样例未通过，节点不能报告通过');
+        if (merged.some(r => !r.proof.length)) throw new Error('每个测试样例都需要看得懂的证据：命令行输出、截图、演示录像、文字或链接');
         if (attempt.specification.acceptance.some(criterion => !parsed.checks.some(check => check.criterion === criterion && check.passed))) throw new Error('每项通过条件都需要明确的成功检查与证据');
         if (parsed.checks.some(check => !check.passed || !attempt.specification.acceptance.includes(check.criterion))) throw new Error('检查失败或检查项不属于当前节点');
         if (attempt.specification.kind === 'condition' && typeof parsed.conditionOutcome !== 'boolean') throw new Error('条件节点通过需要明确 true 或 false；unknown 应报告 blocked');
@@ -314,6 +337,7 @@ export class ArborunService {
       }
       if (attempt.specification.kind !== 'condition' && parsed.conditionOutcome !== undefined) throw new Error('只有条件节点可报告条件结论');
       attempt.summary = parsed.summary; attempt.evidence = clone(parsed.evidence); attempt.checks = clone(parsed.checks);
+      if (merged.length) attempt.caseResults = merged;
       if (parsed.conditionOutcome !== undefined) attempt.conditionOutcome = parsed.conditionOutcome;
       if (outdated) {
         attempt.invalidated = true;
@@ -323,6 +347,7 @@ export class ArborunService {
         if (node?.attemptId === attempt.id) {
           node.status = parsed.status === 'progress' ? 'running' : parsed.status;
           node.result = parsed.summary; node.evidence = clone(parsed.evidence);
+          if (merged.length) node.caseResults = clone(merged);
           if (parsed.conditionOutcome !== undefined) node.conditionOutcome = parsed.conditionOutcome;
         }
       }
@@ -444,7 +469,10 @@ export class ArborunService {
         if (node.mapping || node.constraints?.length) details.push(`怎么做：${[node.mapping, ...(node.constraints ?? []).map(c => `注意${c}`)].filter(Boolean).join('；')}`);
         details.push(`通过条件：${node.acceptance.join('；')}`, `失败处理：${node.failure}`);
         const caseNames = { normal: '正常情况', boundary: '边界情况', extreme: '极端情况' } as const;
-        for (const c of node.cases ?? []) details.push(`测试样例·${caseNames[c.kind]}：${c.input} → ${c.expected}`);
+        (node.cases ?? []).forEach((c, i) => {
+          const r = node.caseResults?.find(x => x.case === i);
+          details.push(`测试样例 ${i}·${caseNames[c.kind]}：${c.input} → ${c.expected}${r ? `｜${r.passed ? '通过' : '未通过'}：${r.actual}${r.proof.length ? `（证据 ${r.proof.length} 项）` : ''}` : ''}`);
+        });
         if (node.dependsOn.length) details.push(`执行依赖：${node.dependsOn.join('、')}`);
         if (node.conditionOutcome !== undefined) details.push(`条件结果：${node.conditionOutcome}`);
         if (node.attemptId) details.push(`执行记录：${node.attemptId}`);

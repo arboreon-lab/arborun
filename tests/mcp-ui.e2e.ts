@@ -1,16 +1,20 @@
 import { test, expect, type Page } from '@playwright/test';
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { Server } from 'node:http';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { ArborunRuntime } from '../src/mcp/server';
+import { ArtifactStore } from '../src/mcp/artifacts';
 import type { NodeSpec, Session } from '../src/mcp/schema';
 
 let runtime: ArborunRuntime;
 let server: Server;
 let client: Client;
 let sessionId: string;
+let artifactDir: string;
 
 test.use({ channel: process.env.ARBORUN_TEST_BROWSER_CHANNEL });
 
@@ -126,7 +130,8 @@ async function approve(page: Page, revision: number) {
 }
 
 test.beforeEach(async () => {
-  runtime = new ArborunRuntime({ html: await readFile('dist-mcp/tree.html', 'utf8'), save: async () => {} });
+  artifactDir = await mkdtemp(join(tmpdir(), 'arborun-e2e-artifacts-'));
+  runtime = new ArborunRuntime({ html: await readFile('dist-mcp/tree.html', 'utf8'), save: async () => {}, artifacts: new ArtifactStore(artifactDir) });
   server = await runtime.listen();
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   client = new Client({ name: 'arborun-ui-tests', version: '1.0.0' });
@@ -142,6 +147,7 @@ test.afterEach(async () => {
   await runtime.mcp.close();
   server.closeAllConnections();
   await new Promise<void>(resolve => server.close(() => resolve()));
+  await rm(artifactDir, { recursive: true, force: true });
 });
 
 test('单击展开详情，双击进入任意节点，View 与层级返回共享选择并恢复视野', async ({ page }, info) => {
@@ -291,4 +297,49 @@ test('运行中编辑撤销批准，旧结果仅留历史，并发版本冲突�
   expect((await current()).revision).toBe(3);
   expect((await current()).nodes.find(node => node.id === 'read')!.action).toBe(plan.nodes.find(node => node.id === 'read')!.action);
   await page.screenshot({ path: info.outputPath('reference-edit-conflict-expanded.png'), fullPage: true });
+});
+
+test('长任务：节点完成后，测试里每个样例显示实际结果与看得懂的证据（命令行、截图、演示录像）', async ({ page }) => {
+  const model = JSON.parse(await readFile('examples/mcp-model-plan.json', 'utf8'));
+  const created = await tool('arborun_plan', model);
+  expect(created.isError).not.toBe(true);
+  sessionId = (created.structuredContent as unknown as { session: Session }).session.id;
+  await openTree(page);
+  await nodeButton(page, '训练猫狗照片识别模型').click();
+  await inspector(page).getByRole('button', { name: '批准 v1 并执行', exact: true }).click();
+  await expect(inspector(page).getByRole('button', { name: '暂停执行', exact: true })).toBeVisible();
+  // Root reads as the same four parts as every node.
+  for (const part of ['输入', '输出', '描述', '测试']) await expect(inspector(page).getByRole('heading', { name: part, exact: true })).toBeVisible();
+  await dismissNotice(page);
+  await closeInspector(page);
+
+  const grant = await claimNode('a-clean');
+  const report = await tool('arborun_report', {
+    sessionId, attemptId: grant.attemptId, claimToken: grant.claimToken, eventId: randomUUID(), status: 'passed',
+    summary: '三份照片已分好', evidence: [], checks: [{ criterion: '生成三份清单和报告', passed: true, evidence: 'prepare.py 退出码 0' }],
+    caseResults: [
+      { case: 0, passed: true, actual: '分成 19987 / 2498 / 2499 张', proof: [{ kind: 'command', command: 'python data/prepare.py', output: 'train 19987 / val 2498 / test 2499' }] },
+      { case: 1, passed: true, actual: '只有 1 张的类别被提示数量太少', proof: [{ kind: 'image', path: resolve('plugins/arborun/assets/logo.png'), caption: '数据报告截图' }] },
+      { case: 2, passed: true, actual: '超大照片缩小后照常处理', proof: [{ kind: 'video', path: resolve('tests/fixtures/demo.webm'), caption: '处理过程录像' }] },
+    ],
+  });
+  expect(report.isError, JSON.stringify(report.content)).not.toBe(true);
+
+  await nodeButton(page, '照片整理干净').click();
+  await inspector(page).getByText('Agent 要做的步骤').click();
+  await inspector(page).getByRole('button', { name: '检查并分好照片' }).click();
+  await expect(inspector(page)).toHaveAttribute('data-inspector-node', 'a-clean');
+  const rows = inspector(page).locator('.cases > li');
+  await expect(rows).toHaveCount(3);
+  await expect(rows.nth(0)).toHaveAttribute('data-result', 'passed');
+  await expect(rows.nth(0)).toContainText('实际：分成 19987 / 2498 / 2499 张');
+  await expect(rows.nth(0).locator('.term')).toContainText('$ python data/prepare.py');
+  // The screenshot and the clip come from Arborun's own store, loaded through the panel's authorised channel.
+  const image = rows.nth(1).locator('img.media');
+  await expect(image).toBeVisible();
+  await expect.poll(() => image.evaluate(img => (img as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+  const video = rows.nth(2).locator('video.media');
+  await expect(video).toBeVisible();
+  await expect.poll(() => video.evaluate(v => (v as HTMLVideoElement).readyState)).toBeGreaterThan(0);
+  await page.screenshot({ path: test.info().outputPath('reference-sample-results.png'), fullPage: true });
 });

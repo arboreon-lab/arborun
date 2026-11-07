@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ArborunService } from '../src/mcp/core';
+import { ArborunService, planGaps } from '../src/mcp/core';
 import type { NodeSpec, ProposeInput } from '../src/mcp/schema';
 
 const agents = [
@@ -76,12 +76,41 @@ describe('以效果为中心的计划', () => {
     const tree = service.renderTree(id);
     expect(tree).toContain('输出：下载文件以 EF BB BF 开头');
     expect(tree).toContain('怎么做：序列化后在开头加 BOM 再下载；注意只加一次 BOM');
-    expect(tree).toContain('测试样例·边界情况：空字符串 → 空字符串');
+    expect(tree).toContain('测试样例 1·边界情况：空字符串 → 空字符串');
     expect(() => service.propose(plan([root, result, userTest, agentTest, { ...work, cases: [{ kind: 'huge' as never, input: 'x', expected: 'y' }] }]))).toThrow();
     service.userAction({ type: 'approve', sessionId: id, expectedRevision: 1 });
     const edited = service.userAction({ type: 'edit', sessionId: id, expectedRevision: 1, nodes: [root, result, userTest, agentTest, { ...detailed, cases: cases.slice(0, 2) }] });
     expect(edited.revision).toBe(2);
     expect(edited.status).toBe('draft');
     expect(edited.nodes.find(n => n.id === 'a-bom')!.cases).toHaveLength(2);
+  });
+
+  it('每个测试样例上报实际结果与证据；有样例未通过或缺证据时不能报告通过', () => {
+    const cases = [{ kind: 'normal' as const, input: '3 行订单', expected: '中文正常' }, { kind: 'extreme' as const, input: '5 万行', expected: '不卡住' }];
+    const service = new ArborunService(), id = service.propose(plan([root, result, userTest, agentTest, { ...work, cases }])).id;
+    service.userAction({ type: 'approve', sessionId: id, expectedRevision: 1 });
+    const grant = service.claim({ sessionId: id, revision: 1, nodeId: 'a-bom', agentId: 'export' });
+    const base = { sessionId: id, attemptId: grant.attemptId, claimToken: grant.claimToken, summary: '已加 BOM', evidence: [], checks: [{ criterion: 'a-bom 完成', passed: true, evidence: 'exit 0' }] };
+    const ok = (i: number) => ({ case: i, passed: true, actual: '符合预期', proof: [{ kind: 'command' as const, command: 'node export.js', output: 'OK' }] });
+    expect(() => service.report({ ...base, eventId: 'x0', status: 'progress', caseResults: [ok(0), ok(0)] })).toThrow('只能上报一个结果');
+    expect(() => service.report({ ...base, eventId: 'x1', status: 'progress', caseResults: [ok(5)] })).toThrow('超出范围');
+    expect(() => service.report({ ...base, eventId: 'x2', status: 'passed', caseResults: [ok(0), { ...ok(1), passed: false }] })).toThrow('未通过');
+    expect(() => service.report({ ...base, eventId: 'x3', status: 'passed', caseResults: [ok(0), { ...ok(1), proof: [] }] })).toThrow('看得懂的证据');
+    expect(() => service.report({ ...base, eventId: 'x4', status: 'passed', caseResults: [ok(0), { ...ok(1), proof: [{ kind: 'image' as const }] }] })).toThrow();
+    const long = 'x'.repeat(9000) + '最后一行：完成';
+    const s = service.report({ ...base, eventId: 'x5', status: 'passed', caseResults: [ok(0), { ...ok(1), proof: [{ kind: 'command' as const, command: 'python train.py', output: long }] }] });
+    const node = s.nodes.find(n => n.id === 'a-bom')!;
+    expect(node.status).toBe('passed');
+    const kept = node.caseResults![1].proof[0].output!;
+    expect(kept.endsWith('最后一行：完成')).toBe(true);
+    expect(kept.length).toBeLessThan(8100);
+    expect(service.renderTree(id)).toContain('测试样例 1·极端情况：5 万行 → 不卡住｜通过：符合预期（证据 1 项）');
+  });
+
+  it('提交计划时列出还没写全的四部分，示例长任务计划是完整的', async () => {
+    expect(planGaps(plan().nodes as NodeSpec[])).toContain('「默认下载加 BOM」（a-bom）：缺输出、描述、正常情况样例、边界情况样例、极端情况样例');
+    const { readFile } = await import('node:fs/promises');
+    const model = JSON.parse(await readFile('examples/mcp-model-plan.json', 'utf8'));
+    expect(planGaps(model.nodes)).toEqual([]);
   });
 });

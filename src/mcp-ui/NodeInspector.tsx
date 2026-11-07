@@ -1,5 +1,5 @@
-import { useId, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { NodeSpec, NodeState, Session, TestCase } from '../mcp/schema';
+import { createContext, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import type { CaseResult, NodeSpec, NodeState, Proof, Session, TestCase } from '../mcp/schema';
 import { ACCEPT_ID, activeAttempts, agentColor, aggregateStatus, buildView, counts, isContainer, stateLabel, viewDescendants, type ViewNode } from './canvas-model';
 import { currentWork, nodeActivities } from './collaboration-model';
 import { deletionImpact, nodeSpecification, previewImpact, subtreeIds } from './inspector-model';
@@ -21,6 +21,8 @@ export interface NodeInspectorProps {
   onAskAi: (nodeId: string | null, rework?: boolean) => void;
   /** Ask the host agent to generate normal, boundary and extreme samples for a node. */
   onGenerateCases?: (nodeId: string) => void;
+  /** Loads a stored screenshot or recording as a data: URL. */
+  loadArtifact?: (id: string) => Promise<string>;
   onLocate: (nodeId: string) => void;
   onResetPosition?: (nodeId?: string) => void;
   /** Approve / pause / accept controls for the whole task. */
@@ -101,24 +103,20 @@ function Editor({ node, session, busy, editRevision, onSave, onCancel, adding }:
         {session.agents.map(agent => <option key={agent.id} value={agent.id}>{agent.name}</option>)}
       </select></label>}
     </div>
+    <h4 className="part">输入</h4>
+    <Field label={isTest ? '用什么数据' : '输入'} value={draft.input} onChange={value => change('input', value)} multiline required={!container} maxLength={12000} hint={container ? '这一部分从什么开始' : undefined} />
+    {!container && <Field label={isTest ? '在哪里测' : '在哪'} value={draft.target} onChange={value => change('target', value)} required maxLength={2000} hint={isTest ? '页面、文件或命令' : undefined} />}
+    <h4 className="part">输出</h4>
     {draft.kind === 'result' && <Field label="要达到的效果" value={draft.action} onChange={value => change('action', value)} multiline required maxLength={12000} hint="用户能看到什么、在哪里看到" />}
-    {isTest && <>
-      <Field label="用什么数据" value={draft.input} onChange={value => change('input', value)} multiline required maxLength={12000} />
-      <Field label="在哪里测" value={draft.target} onChange={value => change('target', value)} required maxLength={2000} hint="页面、文件或命令" />
-      <Field label="应该看到（每行一项）" value={criteria} onChange={setCriteria} multiline required />
-      <Field label="测试内容" value={draft.action} onChange={value => change('action', value)} multiline required maxLength={12000} hint="当……时，应该看到……" />
-    </>}
-    {!container && !isTest && <>
-      <Field label="输入" value={draft.input} onChange={value => change('input', value)} multiline required maxLength={12000} />
-      <Field label="在哪" value={draft.target} onChange={value => change('target', value)} required maxLength={2000} />
-      <Field label="输出" value={draft.output ?? ''} onChange={value => change('output', value)} multiline maxLength={12000} hint="这一步产出什么" />
-      <Field label="做到这些才算完成（每行一项）" value={criteria} onChange={setCriteria} multiline required />
-      <Field label="具体动作" value={draft.action} onChange={value => change('action', value)} multiline required maxLength={12000} />
-    </>}
+    {draft.kind !== 'result' && !isTest && <Field label={container ? '这一部分交出什么' : '产出什么'} value={draft.output ?? ''} onChange={value => change('output', value)} multiline maxLength={12000} />}
+    {!container && <Field label={isTest ? '应该看到（每行一项）' : '做到这些才算完成（每行一项）'} value={criteria} onChange={setCriteria} multiline required />}
+    <h4 className="part">描述</h4>
+    <Field label="怎么做" value={draft.mapping ?? ''} onChange={value => change('mapping', value)} multiline maxLength={12000} hint="一两句话：输入怎么变成输出" />
+    {!container && <Field label={isTest ? '测试内容' : '具体动作'} value={draft.action} onChange={value => change('action', value)} multiline required maxLength={12000} hint={isTest ? '当……时，应该看到……' : undefined} />}
+    <Field label="注意（每行一项）" value={constraints} onChange={setConstraints} multiline />
+    {!container && <Field label="没做到时" value={draft.failure} onChange={value => change('failure', value)} multiline required maxLength={12000} />}
     {!container && <>
-      <Field label={isTest ? '怎么测' : '怎么做'} value={draft.mapping ?? ''} onChange={value => change('mapping', value)} multiline maxLength={12000} hint="一两句话：输入怎么变成输出" />
-      <Field label="注意（每行一项）" value={constraints} onChange={setConstraints} multiline />
-      <Field label="没做到时" value={draft.failure} onChange={value => change('failure', value)} multiline required maxLength={12000} />
+      <h4 className="part">测试</h4>
       <fieldset className="cases-edit"><legend>测试样例（每行：输入 → 应该得到）</legend>
         {caseKinds.map(([k, name]) => <Field key={k} label={name} value={cases[k]} onChange={value => setCases(c => ({ ...c, [k]: value }))} multiline />)}
       </fieldset>
@@ -143,14 +141,62 @@ function Editor({ node, session, busy, editRevision, onSave, onCancel, adding }:
   </form>;
 }
 
-function Evidence({ node, session }: { node: NodeState; session: Session }) {
-  const attempt = session.attempts.find(a => a.id === node.attemptId);
-  const checks = attempt?.checks ?? [];
-  if (!checks.length && !node.evidence?.length) return <p className="note">{node.status === 'running' ? '正在测试，做完后这里显示结果和截图。' : '做完后这里显示截图和结果。'}</p>;
-  return <div className="evidence">
+/** Loads stored screenshots and recordings; provided by the host bridge. */
+const ArtifactLoader = createContext<((id: string) => Promise<string>) | undefined>(undefined);
+
+function Media({ proof }: { proof: Proof }) {
+  const load = useContext(ArtifactLoader);
+  const [src, setSrc] = useState<string | undefined>(proof.artifact ? undefined : proof.url);
+  const [error, setError] = useState('');
+  const [zoomed, setZoomed] = useState(false);
+  useEffect(() => {
+    if (!proof.artifact) return;
+    if (!load) { setError('此处无法加载文件'); return; }
+    let live = true;
+    load(proof.artifact).then(url => { if (live) setSrc(url); }, failure => { if (live) setError(failure instanceof Error ? failure.message : '加载失败'); });
+    return () => { live = false; };
+  }, [proof.artifact, load]);
+  if (error || (!src && !proof.artifact)) return <p className="note">{error || '没有可显示的文件'}{proof.path ? `：${proof.path}` : ''}</p>;
+  if (!src) return <p className="note">正在加载…</p>;
+  const video = proof.kind === 'video' && !/\.gif$|image\/gif/.test(proof.artifact ?? src);
+  return video
+    ? <video className="media" src={src} controls muted loop playsInline preload="metadata" />
+    : <img className={`media${zoomed ? ' zoomed' : ''}`} src={src} alt={proof.caption ?? '截图'} onClick={() => setZoomed(z => !z)} />;
+}
+/** One piece of proof, shown the way a person reads it: a terminal, a picture, a clip, a sentence or a link. */
+function ProofView({ proof }: { proof: Proof }) {
+  return <figure className={`proof ${proof.kind}`} data-proof-kind={proof.kind}>
+    {proof.caption && <figcaption>{proof.caption}</figcaption>}
+    {proof.kind === 'command' && <pre className="term"><span className="prompt">$ </span>{proof.command}{proof.output ? `\n${proof.output}` : ''}</pre>}
+    {(proof.kind === 'image' || proof.kind === 'video') && <Media proof={proof} />}
+    {proof.kind === 'text' && <p>{proof.output}</p>}
+    {proof.kind === 'link' && <a href={proof.url} target="_blank" rel="noreferrer noopener">{proof.url}</a>}
+  </figure>;
+}
+
+const resultOf = (node: NodeState, i: number): CaseResult | undefined => node.caseResults?.find(r => r.case === i);
+/** Samples by kind; once the node has run, each sample shows what actually happened and its proof. */
+function Samples({ node, onGenerateCases, busy }: { node: NodeState; onGenerateCases?: (id: string) => void; busy: boolean }) {
+  const cases = (node.cases ?? []).map((c, i) => ({ c, i, r: resultOf(node, i) }));
+  return <>
+    {cases.length ? caseKinds.map(([k, label]) => { const rows = cases.filter(x => x.c.kind === k); return <div key={k} className="case-group" data-case-kind={k}>
+      <h4>{label}</h4>
+      {rows.length ? <ul className="cases">{rows.map(({ c, i, r }) => <li key={i} data-case={i} data-result={r ? (r.passed ? 'passed' : 'failed') : 'pending'}>
+        <div className="case-line"><span className="in">{c.input}</span><span className="arrow" aria-label="应该得到">→</span><span className="out">{c.expected}</span>
+          <span className="verdict">{r ? (r.passed ? '✓ 通过' : '✗ 未通过') : node.status === 'running' ? '测试中' : '待测试'}</span></div>
+        {r && <div className="case-result"><p className="actual">实际：{r.actual}</p>{r.proof.map((p, j) => <ProofView key={j} proof={p} />)}</div>}
+      </li>)}</ul> : <p className="note">暂无</p>}
+    </div>; }) : <p className="note">还没有样例。</p>}
+    {onGenerateCases && (!cases.length || caseKinds.some(([k]) => !cases.some(x => x.c.kind === k))) && <div className="row"><button type="button" className="btn" disabled={busy} onClick={() => onGenerateCases(node.id)}>让 Agent 补样例</button></div>}
+  </>;
+}
+/** Checks and free-form evidence reported outside the samples. */
+function OtherEvidence({ node, session }: { node: NodeState; session: Session }) {
+  const checks = session.attempts.find(a => a.id === node.attemptId)?.checks ?? [];
+  if (!checks.length && !node.evidence?.length) return null;
+  return <div className="evidence"><h4>其他证据</h4>
     {!!checks.length && <ul className="checks">{checks.map((check, index) => <li key={index} data-passed={check.passed}><span className="mark" aria-hidden="true">{check.passed ? '✓' : '✗'}</span><div>{check.criterion}<small>{check.evidence}</small></div></li>)}</ul>}
-    {node.evidence?.map((item, index) => isImage(item) ? <img key={index} src={item} alt={`${node.title} 的证据 ${index + 1}`} /> : <p key={index} className="mono">{item}</p>)}
-    <p className="note">以上由 Agent 提供，仍需你确认。</p>
+    {node.evidence?.map((item, index) => isImage(item) ? <img key={index} className="media" src={item} alt={`${node.title} 的证据 ${index + 1}`} /> : <p key={index} className="mono">{item}</p>)}
   </div>;
 }
 function Live({ session, nodeId }: { session: Session; nodeId: string }) {
@@ -170,88 +216,88 @@ function Messages({ session, nodeId }: { session: Session; nodeId: string }) {
     <div className="meta">{new Date(a.at).toLocaleTimeString()} · {a.kind === 'message_sent' ? `${name(a.agentId)} → ${name(a.toAgentId)} · 已发送` : `${name(a.fromAgentId)} → ${name(a.agentId)} · 已接收`}{a.revision !== session.revision ? ` · v${a.revision}` : ''}</div>{a.summary}</div></li>)}</ul></Section>;
 }
 const Section = ({ title, children }: { title?: string; children: ReactNode }) => <section className="panel-section">{title && <h3>{title}</h3>}{children}</section>;
+const Unfilled = () => <p className="note">未填写</p>;
 function Links({ session, view, ids, onLocate }: { session: Session; view: Map<string, ViewNode>; ids: string[]; onLocate: (id: string) => void }) {
   return <div className="links">{ids.map(id => <button type="button" key={id} className="link-chip" onClick={() => onLocate(id)}><Glyph session={session} view={view} id={id} size={13} />{view.get(id)?.title ?? id}</button>)}</div>;
 }
 function TestRows({ session, view, ids, onLocate }: { session: Session; view: Map<string, ViewNode>; ids: string[]; onLocate: (id: string) => void }) {
-  return <ul className="test-list">{ids.map(id => { const n = view.get(id)!.node!; return <li key={id}><button type="button" className="test-row" onClick={() => onLocate(id)}>
-    <Glyph session={session} view={view} id={id} size={15} /><span className="t">{n.title}</span><span className={`by ${n.by ?? 'agent'}`}>{n.by === 'user' ? '你设定' : 'Agent 补充'}</span>
-    <span className={`s ${n.status}`}>{stateLabel(session, view, id)}</span></button></li>; })}</ul>;
+  return <ul className="test-list">{ids.map(id => { const n = view.get(id)!.node!, total = n.cases?.length ?? 0, passed = n.caseResults?.filter(r => r.passed).length ?? 0;
+    return <li key={id}><button type="button" className="test-row" onClick={() => onLocate(id)}>
+      <Glyph session={session} view={view} id={id} size={15} /><span className="t">{n.title}</span><span className={`by ${n.by ?? 'agent'}`}>{n.by === 'user' ? '你设定' : 'Agent 补充'}</span>
+      {total > 0 && <span className="n">样例 {passed}/{total}</span>}<span className={`s ${n.status}`}>{stateLabel(session, view, id)}</span></button></li>; })}</ul>;
 }
 
-/** How a step or test reads in the panel: what goes in, what comes out, how (with its limits), and samples. Plain words only. */
-function Spec({ node, session, view, onLocate, onGenerateCases, busy }: { node: NodeState; session: Session; view: Map<string, ViewNode>; onLocate: (id: string) => void; onGenerateCases?: (id: string) => void; busy: boolean }) {
-  const isTest = node.kind === 'test';
+/** 描述: how the input becomes the output, then what to watch for, what comes first, when it applies and what happens if it falls short. */
+function Describe({ node, view, onLocate, fallback }: { node: NodeState; view: Map<string, ViewNode>; onLocate: (id: string) => void; fallback?: string }) {
   const name = (id: string) => view.get(id)?.title ?? id;
-  return <>
-    <Section title="输入"><p>{node.input}</p>{node.target && <p className="where"><span>在哪</span><span className="mono">{node.target}</span></p>}</Section>
-    <Section title="输出">{node.output && <p>{node.output}</p>}
-      {!!node.acceptance.length && <ul className="plain outcome">{node.acceptance.map((item, i) => <li key={i}>{item}</li>)}</ul>}
-      {node.conditionOutcome !== undefined && <p>结果：{node.conditionOutcome === 'unknown' ? '还不确定' : node.conditionOutcome ? '成立' : '不成立'}</p>}</Section>
-    <Section title={isTest ? '怎么测' : '怎么做'}><p>{node.mapping || node.action}</p>
-      <ul className="plain rules">
-        {(node.constraints ?? []).map((item, i) => <li key={i}>{item}</li>)}
-        {!!node.dependsOn.length && <li>先等{node.dependsOn.map(id => <button key={id} type="button" className="link-plain" onClick={() => onLocate(id)}>「{name(id)}」</button>)}完成</li>}
-        {node.when && <li>只在<button type="button" className="link-plain" onClick={() => onLocate(node.when!.nodeId)}>「{name(node.when.nodeId)}」</button>{node.when.outcome ? '成立' : '不成立'}时做</li>}
-        {node.failure && <li>没做到：{node.failure}</li>}
-      </ul></Section>
-    <Section title="测试样例">{node.cases?.length
-      ? caseKinds.map(([k, label]) => { const rows = node.cases!.filter(c => c.kind === k); return <div key={k} className="case-group" data-case-kind={k}>
-          <h4>{label}</h4>
-          {rows.length ? <ul className="cases">{rows.map((c, i) => <li key={i}><span className="in">{c.input}</span><span className="arrow" aria-label="得到">→</span><span className="out">{c.expected}</span></li>)}</ul> : <p className="note">暂无</p>}
-        </div>; })
-      : <p className="note">还没有样例。</p>}
-      {onGenerateCases && (!node.cases?.length || caseKinds.some(([k]) => !node.cases!.some(c => c.kind === k))) && <div className="row"><button type="button" className="btn" disabled={busy} onClick={() => onGenerateCases(node.id)}>让 Agent 补样例</button></div>}
-    </Section>
-  </>;
+  const text = node.mapping || fallback;
+  const rules = [
+    ...(node.constraints ?? []).map((item, i) => <li key={`c${i}`}>{item}</li>),
+    !!node.dependsOn.length && <li key="d">先等{node.dependsOn.map(id => <button key={id} type="button" className="link-plain" onClick={() => onLocate(id)}>「{name(id)}」</button>)}完成</li>,
+    node.when && <li key="w">只在<button type="button" className="link-plain" onClick={() => onLocate(node.when!.nodeId)}>「{name(node.when.nodeId)}」</button>{node.when.outcome ? '成立' : '不成立'}时做</li>,
+    !isContainer(node) && node.failure && <li key="f">没做到：{node.failure}</li>,
+  ].filter(Boolean);
+  return <>{text ? <p>{text}</p> : !rules.length && <Unfilled />}{!!rules.length && <ul className="plain rules">{rules}</ul>}</>;
 }
+const Outcome = ({ node }: { node: NodeState }) => node.result ? <Section><div className={`callout ${node.status === 'failed' ? 'fail' : node.status === 'passed' ? 'pass' : ''}`}><p>{node.result}</p></div></Section> : null;
 
+/** Every node reads the same way: 输入, 输出, 描述, 测试. */
 function Details(props: NodeInspectorProps & { node: NodeState; view: Map<string, ViewNode> }) {
   const { node, session, view, onLocate } = props;
   const kids = view.get(node.id)?.children ?? [];
   const attempts = session.attempts.filter(attempt => attempt.nodeId === node.id);
   const agent = session.agents.find(item => item.id === node.agentId);
-  if (node.parentId === null) return <>
-    <Section><p>{session.goal}</p></Section>
-    {!!session.clarifications?.length && <Section title="已确认的要求"><dl className="qa">{session.clarifications.map((item, index) => <div key={index}><dt>{item.question}</dt><dd>{item.answer}</dd></div>)}</dl></Section>}
-    {props.taskActions && <Section><div className="decision">{props.taskActions}</div></Section>}
-    <Section title="Agent 分工"><ul className="agents">{session.agents.map(a => <li key={a.id}><Avatar session={session} agentId={a.id} /><div><strong>{a.name}</strong> · {a.role}<p>负责：{a.scope}</p><p>上限：{a.budget}</p></div></li>)}</ul></Section>
-    {!!session.context.length && <details className="panel-section fold"><summary>上下文依据</summary><ul>{session.context.map((item, i) => <li key={i}>{item}</li>)}</ul></details>}
-  </>;
-  if (node.kind === 'result') {
-    const tests = kids.filter(id => view.get(id)?.node?.kind === 'test'), workId = kids.find(id => view.get(id)?.kind === 'work');
+  const testsUnder = (id: string) => viewDescendants(view, id).filter(x => view.get(x)?.node?.kind === 'test');
+  const samples = <Samples node={node} onGenerateCases={props.onGenerateCases} busy={props.busy} />;
+
+  if (node.parentId === null) {
+    const stages = kids.filter(id => id !== ACCEPT_ID), results = session.nodes.filter(n => n.kind === 'result');
     return <>
-      <Section title="要达到的效果"><p>{node.action}</p></Section>
-      <Section title="测试"><TestRows session={session} view={view} ids={tests} onLocate={onLocate} /><p className="note">你设定的测试是验收标准；Agent 补充的只是额外检查。</p></Section>
-      <Section title="证据">{tests.map(id => { const t = view.get(id)!.node!; return (t.evidence?.length || t.attemptId) ? <div key={id} className="evidence-group"><h4>{t.title}</h4><Evidence node={t} session={session} /></div> : null; })}
-        {!tests.some(id => view.get(id)?.node?.evidence?.length) && <p className="note">还没有证据。</p>}</Section>
-      {workId && <details className="panel-section fold"><summary>Agent 工作 · {view.get(workId)!.children.length} 步 · {stateLabel(session, view, workId)}</summary><Links session={session} view={view} ids={view.get(workId)!.children} onLocate={onLocate} /></details>}
+      {props.taskActions && <Section><div className="decision">{props.taskActions}</div></Section>}
+      <Section title="输入">{node.input && <p>{node.input}</p>}
+        {!!session.clarifications?.length && <dl className="qa">{session.clarifications.map((item, index) => <div key={index}><dt>{item.question}</dt><dd>{item.answer}</dd></div>)}</dl>}
+        {!node.input && !session.clarifications?.length && <Unfilled />}
+        {!!session.context.length && <details className="fold"><summary>依据的资料（{session.context.length}）</summary><ul>{session.context.map((item, i) => <li key={i}>{item}</li>)}</ul></details>}</Section>
+      <Section title="输出"><p>{node.output || session.goal}</p></Section>
+      <Section title="描述"><Describe node={node} view={view} onLocate={onLocate} fallback={node.action} />
+        <p className="note">分 {stages.length} 步完成：</p><Links session={session} view={view} ids={stages} onLocate={onLocate} />
+        <details className="fold"><summary>Agent 分工（{session.agents.length}）</summary><ul className="agents">{session.agents.map(a => <li key={a.id}><Avatar session={session} agentId={a.id} /><div><strong>{a.name}</strong> · {a.role}<p>负责：{a.scope}</p><p>上限：{a.budget}</p></div></li>)}</ul></details></Section>
+      <Section title="测试">{results.length ? results.map(r => <div key={r.id} className="accept-item"><h4><button type="button" className="link-plain" onClick={() => onLocate(r.id)}><Glyph session={session} view={view} id={r.id} size={14} />{r.title}</button></h4>
+        <TestRows session={session} view={view} ids={testsUnder(r.id)} onLocate={onLocate} /></div>) : <TestRows session={session} view={view} ids={testsUnder(node.id)} onLocate={onLocate} />}</Section>
     </>;
   }
-  if (node.kind === 'test') {
-    const result = view.get(node.parentId!)?.kind === 'result' ? node.parentId! : undefined;
-    const fixing = node.status === 'failed' && result ? activeAttempts(session).find(a => viewDescendants(view, result).includes(a.nodeId) && session.nodes.find(n => n.id === a.nodeId)?.kind !== 'test') : undefined;
+  if (isContainer(node)) {
+    const result = node.kind === 'result', tests = result ? kids.filter(id => view.get(id)?.node?.kind === 'test') : testsUnder(node.id);
+    const workId = kids.find(id => view.get(id)?.kind === 'work');
     return <>
-      <Live session={session} nodeId={node.id} />
-      {node.result && <Section><div className={`callout ${node.status === 'failed' ? 'fail' : node.status === 'passed' ? 'pass' : ''}`}><p>{node.result}</p></div></Section>}
-      <Spec node={node} session={session} view={view} onLocate={onLocate} onGenerateCases={props.onGenerateCases} busy={props.busy} />
-      <Section title="证据"><Evidence node={node} session={session} /></Section>
-      {fixing && <Section title="处理"><p>Agent 正在自动修复，你不用处理：</p><Live session={session} nodeId={fixing.nodeId} /><Links session={session} view={view} ids={[fixing.nodeId]} onLocate={onLocate} /></Section>}
-      {result && <Section title="所属效果"><Links session={session} view={view} ids={[result]} onLocate={onLocate} /></Section>}
-      <Messages session={session} nodeId={node.id} />
+      <Section title="输入">{node.input ? <p>{node.input}</p> : <Unfilled />}</Section>
+      <Section title="输出">{result ? <p>{node.action}</p> : node.output || node.action ? <p>{node.output || node.action}</p> : <Unfilled />}{result && node.output && <p>{node.output}</p>}</Section>
+      <Section title="描述"><Describe node={node} view={view} onLocate={onLocate} fallback={!result && node.output ? node.action : undefined} />
+        {!result && <><p className="note">包含：</p><Links session={session} view={view} ids={kids} onLocate={onLocate} /></>}
+        {workId && <details className="fold"><summary>Agent 要做的步骤（{view.get(workId)!.children.length}）· {stateLabel(session, view, workId)}</summary><Links session={session} view={view} ids={view.get(workId)!.children} onLocate={onLocate} /></details>}</Section>
+      <Section title="测试">{tests.length ? <TestRows session={session} view={view} ids={tests} onLocate={onLocate} /> : <p className="note">这里还没有测试。</p>}
+        {result && !!tests.length && <p className="note">你设定的测试是验收标准；Agent 补充的只是额外检查。</p>}
+        {!!node.cases?.length && samples}</Section>
     </>;
   }
-  if (isContainer(node)) return <>
-    {node.action && <Section><p>{node.action}</p></Section>}
-    <Section title="包含"><Links session={session} view={view} ids={kids} onLocate={onLocate} /></Section>
-  </>;
+  const isTest = node.kind === 'test';
+  const result = isTest && view.get(node.parentId!)?.kind === 'result' ? node.parentId! : undefined;
+  const fixing = isTest && node.status === 'failed' && result ? activeAttempts(session).find(a => viewDescendants(view, result).includes(a.nodeId) && session.nodes.find(n => n.id === a.nodeId)?.kind !== 'test') : undefined;
   return <>
     <Live session={session} nodeId={node.id} />
-    {node.result && <Section><div className={`callout ${node.status === 'failed' ? 'fail' : node.status === 'passed' ? 'pass' : ''}`}><p>{node.result}</p></div></Section>}
-    <Spec node={node} session={session} view={view} onLocate={onLocate} onGenerateCases={props.onGenerateCases} busy={props.busy} />
-    {(node.evidence?.length || node.attemptId) ? <Section title="证据"><Evidence node={node} session={session} /></Section> : null}
+    <Outcome node={node} />
+    <Section title="输入"><p>{node.input}</p>{node.target && <p className="where"><span>在哪</span><span className="mono">{node.target}</span></p>}</Section>
+    <Section title="输出">{node.output && <p>{node.output}</p>}
+      {!!node.acceptance.length && <ul className="plain outcome">{node.acceptance.map((item, i) => <li key={i}>{item}</li>)}</ul>}
+      {node.conditionOutcome !== undefined && <p>结果：{node.conditionOutcome === 'unknown' ? '还不确定' : node.conditionOutcome ? '成立' : '不成立'}</p>}</Section>
+    <Section title="描述"><Describe node={node} view={view} onLocate={onLocate} fallback={node.action} />
+      {node.mapping && node.action && node.action !== node.mapping && <p className="note">{isTest ? '测试内容' : '具体动作'}：{node.action}</p>}</Section>
+    <Section title="测试">{samples}<OtherEvidence node={node} session={session} />
+      {(node.caseResults?.length || node.evidence?.length) ? <p className="note">以上由 Agent 提供，仍需你确认。</p> : null}</Section>
+    {fixing && <Section title="处理"><p>Agent 正在自动修复，你不用处理：</p><Live session={session} nodeId={fixing.nodeId} /><Links session={session} view={view} ids={[fixing.nodeId]} onLocate={onLocate} /></Section>}
+    {result && <Section title="所属效果"><Links session={session} view={view} ids={[result]} onLocate={onLocate} /></Section>}
     <Messages session={session} nodeId={node.id} />
-    {agent && <details className="panel-section fold"><summary>Agent 负责什么</summary><dl className="fields"><div><dt>负责</dt><dd>{agent.scope}</dd></div><div><dt>上限</dt><dd>{agent.budget}</dd></div></dl></details>}
+    {!isTest && agent && <details className="panel-section fold"><summary>Agent 负责什么</summary><dl className="fields"><div><dt>负责</dt><dd>{agent.scope}</dd></div><div><dt>上限</dt><dd>{agent.budget}</dd></div></dl></details>}
     {!!attempts.length && <details className="panel-section fold"><summary>历史执行（{attempts.length}）</summary><ul className="history">{[...attempts].reverse().map(a => <li key={a.id}>
       <p>v{a.revision} · {session.agents.find(x => x.id === a.agentId)?.name ?? a.agentId} · {({ passed: '通过', running: '执行中', interrupted: '已中断', stale: '需重做', failed: '未通过', blocked: '需要处理' } as const)[a.status]}{a.invalidated ? ' · 已失效' : ''}</p><p>{a.summary || '尚无结果'}</p>
     </li>)}</ul></details>}
@@ -344,7 +390,7 @@ export function NodeInspector(props: NodeInspectorProps) {
     : current.status === 'failed' && !isContainer(current) ? <button type="button" className="btn primary" disabled={busy} onClick={() => props.onAskAi(nodeId)}>让 AI 修正</button>
     : node.parentId === null ? undefined : isContainer(current) ? <button type="button" className="btn" disabled={busy} onClick={() => props.onAskAi(nodeId)}>让 AI 修改</button>
     : <><button type="button" className="btn" disabled={busy} onClick={() => props.onAskAi(nodeId)}>让 AI 修改</button><button type="button" className="btn" disabled={busy} onClick={props.onEdit}>编辑</button></>;
-  return <Shell session={session} view={view} id={nodeId} title={title} status={nodeStatus} menu={menu} onClose={onClose} busy={busy} foot={foot}>
+  return <ArtifactLoader.Provider value={props.loadArtifact}><Shell session={session} view={view} id={nodeId} title={title} status={nodeStatus} menu={menu} onClose={onClose} busy={busy} foot={foot}>
     <div ref={contentRef} data-inspector-mode={mode}>
       {mode === 'detail' ? current ? <>
         {confirmDelete && <DeletionConfirmation node={current} {...props} onCancel={() => setConfirmDelete(false)} />}
@@ -353,5 +399,5 @@ export function NodeInspector(props: NodeInspectorProps) {
         : <Editor key={`${nodeId}:${mode}`} node={mode === 'add' ? newNode : node} session={session} busy={busy}
             editRevision={editRevision} onSave={props.onSave} onCancel={onClose} adding={mode === 'add'} />}
     </div>
-  </Shell>;
+  </Shell></ArtifactLoader.Provider>;
 }

@@ -84,7 +84,7 @@ async function start() {
     })().catch(error);
   };
   await bridge.connect(new PostMessageTransport(iframe.contentWindow!, iframe.contentWindow!));
-  const policy = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'";
+  const policy = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; img-src data:; media-src data:; font-src data:; base-uri 'none'; form-action 'none'";
   iframe.srcdoc = initial.html.replace('<head>', `<head><meta http-equiv="Content-Security-Policy" content="${policy}">`);
 }
 

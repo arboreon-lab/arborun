@@ -27682,10 +27682,10 @@ __export(install_exports, {
   install: () => install
 });
 import { execFileSync } from "node:child_process";
-import { copyFile, mkdir as mkdir2, readFile as readFile2, writeFile } from "node:fs/promises";
+import { copyFile, mkdir as mkdir3, readFile as readFile3, writeFile as writeFile2 } from "node:fs/promises";
 import { existsSync, realpathSync } from "node:fs";
-import { homedir, platform } from "node:os";
-import { dirname, join as join2, resolve } from "node:path";
+import { homedir as homedir2, platform } from "node:os";
+import { dirname, join as join3, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 function stableNode() {
   const real = realpathSync(process.execPath);
@@ -27699,27 +27699,27 @@ function stableNode() {
 }
 async function placeServer() {
   const source = dirname(fileURLToPath(import.meta.url));
-  const target = join2(home, ".arborun", "server");
+  const target = join3(home, ".arborun", "server");
   if (resolve(source) !== resolve(target)) {
-    await mkdir2(target, { recursive: true });
-    for (const file2 of ["index.mjs", "tree.html"]) await copyFile(join2(source, file2), join2(target, file2));
+    await mkdir3(target, { recursive: true });
+    for (const file2 of ["index.mjs", "tree.html"]) await copyFile(join3(source, file2), join3(target, file2));
   }
-  return { command: stableNode(), args: [join2(target, "index.mjs")], env: { ARBORUN_MCP_DATA_DIR: join2(home, ".arborun", "data") } };
+  return { command: stableNode(), args: [join3(target, "index.mjs")], env: { ARBORUN_MCP_DATA_DIR: join3(home, ".arborun", "data") } };
 }
 async function writeConfig(path, entry) {
   let config2 = {};
   if (existsSync(path)) {
-    const text2 = await readFile2(path, "utf8");
+    const text2 = await readFile3(path, "utf8");
     try {
       config2 = text2.trim() ? JSON.parse(text2) : {};
     } catch {
       throw new Error(`\u65E0\u6CD5\u89E3\u6790 ${path}\uFF08\u53EF\u80FD\u5305\u542B\u6CE8\u91CA\uFF09\u3002\u8BF7\u624B\u52A8\u628A --print \u8F93\u51FA\u7684\u7247\u6BB5\u52A0\u5165 mcpServers\u3002`);
     }
-    await writeFile(`${path}.arborun-backup-${Date.now()}`, text2);
-  } else await mkdir2(dirname(path), { recursive: true });
+    await writeFile2(`${path}.arborun-backup-${Date.now()}`, text2);
+  } else await mkdir3(dirname(path), { recursive: true });
   const servers = config2.mcpServers && typeof config2.mcpServers === "object" ? config2.mcpServers : {};
   config2.mcpServers = { ...servers, arborun: entry };
-  await writeFile(path, `${JSON.stringify(config2, null, 2)}
+  await writeFile2(path, `${JSON.stringify(config2, null, 2)}
 `);
 }
 function hasCli(name) {
@@ -27776,18 +27776,18 @@ var home, appData, appSupport, CLIENTS, usage, installed;
 var init_install = __esm({
   "src/mcp/install.ts"() {
     "use strict";
-    home = homedir();
-    appData = process.env.APPDATA ?? join2(home, "AppData", "Roaming");
-    appSupport = (name) => platform() === "darwin" ? join2(home, "Library", "Application Support", name) : platform() === "win32" ? join2(appData, name) : join2(home, ".config", name);
+    home = homedir2();
+    appData = process.env.APPDATA ?? join3(home, "AppData", "Roaming");
+    appSupport = (name) => platform() === "darwin" ? join3(home, "Library", "Application Support", name) : platform() === "win32" ? join3(appData, name) : join3(home, ".config", name);
     CLIENTS = {
-      "claude-desktop": { title: "Claude Desktop", config: join2(appSupport("Claude"), "claude_desktop_config.json") },
+      "claude-desktop": { title: "Claude Desktop", config: join3(appSupport("Claude"), "claude_desktop_config.json") },
       "claude-code": { title: "Claude Code", cliName: "claude", cli: (command, args, env) => ["mcp", "add", "-s", "user", ...Object.entries(env).flatMap(([k2, v2]) => ["-e", `${k2}=${v2}`]), "arborun", "--", command, ...args] },
       codex: { title: "Codex", cliName: "codex", cli: (command, args, env) => ["mcp", "add", ...Object.entries(env).flatMap(([k2, v2]) => ["--env", `${k2}=${v2}`]), "arborun", "--", command, ...args] },
-      antigravity: { title: "Antigravity", config: join2(home, ".gemini", "config", "mcp_config.json") },
-      trae: { title: "Trae", config: join2(appSupport("Trae"), "mcp.json") },
-      workbuddy: { title: "WorkBuddy", config: join2(home, ".workbuddy", "mcp.json") },
-      cursor: { title: "Cursor", config: join2(home, ".cursor", "mcp.json") },
-      "gemini-cli": { title: "Gemini CLI", config: join2(home, ".gemini", "settings.json") }
+      antigravity: { title: "Antigravity", config: join3(home, ".gemini", "config", "mcp_config.json") },
+      trae: { title: "Trae", config: join3(appSupport("Trae"), "mcp.json") },
+      workbuddy: { title: "WorkBuddy", config: join3(home, ".workbuddy", "mcp.json") },
+      cursor: { title: "Cursor", config: join3(home, ".cursor", "mcp.json") },
+      "gemini-cli": { title: "Gemini CLI", config: join3(home, ".gemini", "settings.json") }
     };
     usage = `Arborun MCP \u5B89\u88C5
 \u7528\u6CD5\uFF1A
@@ -27803,10 +27803,10 @@ var init_install = __esm({
 });
 
 // src/mcp/index.ts
-import { readFile as readFile3 } from "node:fs/promises";
+import { readFile as readFile4 } from "node:fs/promises";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
-import { dirname as dirname2, join as join3, resolve as resolve2 } from "node:path";
-import { homedir as homedir2, platform as platform2 } from "node:os";
+import { dirname as dirname2, join as join4, resolve as resolve2 } from "node:path";
+import { homedir as homedir3, platform as platform2 } from "node:os";
 import { spawn } from "node:child_process";
 
 // node_modules/.pnpm/@modelcontextprotocol+sdk@1.32.2_zod@4.6.7/node_modules/@modelcontextprotocol/sdk/dist/esm/server/stdio.js
@@ -29524,6 +29524,193 @@ var SnapshotFile = class {
       await rm(join(this.directory, "server.lock"), { force: true });
       this.locked = false;
     }
+  }
+};
+
+// src/mcp/artifacts.ts
+import { createHash } from "node:crypto";
+import { mkdir as mkdir2, open as open3, readFile as readFile2, stat as stat2, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { isAbsolute, join as join2 } from "node:path";
+
+// node_modules/.pnpm/zod@4.6.7/node_modules/zod/index.js
+init_external();
+init_external();
+
+// src/mcp/schema.ts
+var id = external_exports.string().trim().min(1).max(120).regex(/^[^\s\u0000-\u001f]+$/u, "ID \u4E0D\u80FD\u5305\u542B\u7A7A\u767D\u6216\u63A7\u5236\u5B57\u7B26");
+var text = external_exports.string().trim().min(1).max(12e3);
+var short = external_exports.string().trim().min(1).max(300);
+var revision = external_exports.number().int().positive();
+var caseSchema = external_exports.object({ kind: external_exports.enum(["normal", "boundary", "extreme"]), input: text, expected: text }).strict();
+var nodeSchema = external_exports.object({
+  // result: an effect the person can see; test: how that effect is proven (who set it is recorded in `by`).
+  id,
+  parentId: id.nullable(),
+  kind: external_exports.enum(["group", "result", "test", "action", "condition", "agent"]),
+  by: external_exports.enum(["user", "agent"]).optional(),
+  title: short,
+  action: external_exports.string().max(12e3).default(""),
+  target: external_exports.string().max(2e3).default(""),
+  input: external_exports.string().max(12e3).default(""),
+  acceptance: external_exports.array(text).max(30).default([]),
+  failure: external_exports.string().max(12e3).default(""),
+  dependsOn: external_exports.array(id).max(100).default([]),
+  // What the step produces, one paragraph on how input becomes output, the limits it must respect, and its test samples.
+  output: external_exports.string().trim().max(12e3).optional(),
+  mapping: external_exports.string().trim().max(12e3).optional(),
+  constraints: external_exports.array(text).max(30).optional(),
+  cases: external_exports.array(caseSchema).max(30).optional(),
+  when: external_exports.object({ nodeId: id, outcome: external_exports.boolean() }).strict().optional(),
+  agentId: id.default("main")
+}).strict();
+var agentSchema = external_exports.object({
+  id,
+  name: short,
+  role: text,
+  scope: text,
+  budget: text,
+  parentId: id.optional()
+}).strict();
+var clarificationSchema = external_exports.object({ question: text, answer: external_exports.string().trim().max(12e3).optional() }).strict();
+var planFields = {
+  title: short,
+  goal: text,
+  context: external_exports.array(text).max(50).default([]),
+  nodes: external_exports.array(nodeSchema).min(2).max(100),
+  agents: external_exports.array(agentSchema).min(1).max(20),
+  clarifications: external_exports.array(clarificationSchema).max(30).optional()
+};
+var proposeSchema = external_exports.object({
+  sessionId: id.optional(),
+  expectedRevision: revision.optional(),
+  ...planFields
+}).strict();
+var claimSchema = external_exports.object({ sessionId: id, revision, nodeId: id, agentId: id }).strict();
+var ARTIFACT_ID = /^[0-9a-f]{64}\.(png|jpg|gif|webp|mp4|webm)$/;
+var proofSchema = external_exports.object({
+  kind: external_exports.enum(["command", "image", "video", "text", "link"]),
+  caption: external_exports.string().trim().max(300).optional(),
+  command: external_exports.string().trim().max(2e3).optional(),
+  output: external_exports.string().max(1e5).optional(),
+  path: external_exports.string().trim().max(2e3).optional(),
+  url: external_exports.string().trim().max(2e3).regex(/^https?:\/\//, "\u94FE\u63A5\u9700\u4EE5 http(s):// \u5F00\u5934").optional(),
+  artifact: external_exports.string().regex(ARTIFACT_ID).optional()
+}).strict().superRefine((p2, ctx) => {
+  const need = (ok, message) => {
+    if (!ok) ctx.addIssue({ code: "custom", message });
+  };
+  if (p2.kind === "command") need(Boolean(p2.command), "\u547D\u4EE4\u884C\u8BC1\u636E\u9700\u8981 command\uFF08\u4EE5\u53CA\u5B83\u7684\u8F93\u51FA output\uFF09");
+  if (p2.kind === "text") need(Boolean(p2.output?.trim()), "\u6587\u5B57\u8BC1\u636E\u9700\u8981 output");
+  if (p2.kind === "link") need(Boolean(p2.url), "\u94FE\u63A5\u8BC1\u636E\u9700\u8981 url");
+  if (p2.kind === "image" || p2.kind === "video") need(Boolean(p2.path || p2.url || p2.artifact), "\u622A\u56FE\u6216\u5F55\u50CF\u9700\u8981\u672C\u5730\u6587\u4EF6 path \u6216 url");
+});
+var caseResultSchema = external_exports.object({
+  case: external_exports.number().int().nonnegative(),
+  passed: external_exports.boolean(),
+  actual: text,
+  proof: external_exports.array(proofSchema).max(8).default([])
+}).strict();
+var reportSchema = external_exports.object({
+  sessionId: id,
+  attemptId: id,
+  claimToken: id,
+  eventId: id,
+  status: external_exports.enum(["progress", "passed", "failed", "blocked"]),
+  summary: text,
+  evidence: external_exports.array(text).max(50).default([]),
+  checks: external_exports.array(external_exports.object({ criterion: text, passed: external_exports.boolean(), evidence: text }).strict()).max(30).default([]),
+  conditionOutcome: external_exports.union([external_exports.boolean(), external_exports.literal("unknown")]).optional(),
+  caseResults: external_exports.array(caseResultSchema).max(30).default([])
+}).strict();
+var activityBase = { sessionId: id, attemptId: id, claimToken: id, eventId: id, summary: text, runtimeAgentId: id.optional() };
+var activitySchema = external_exports.discriminatedUnion("kind", [
+  external_exports.object({ ...activityBase, kind: external_exports.literal("action"), target: external_exports.string().trim().max(2e3).optional() }).strict(),
+  external_exports.object({ ...activityBase, kind: external_exports.literal("message_sent"), messageId: id, toAgentId: id, toNodeId: id.optional() }).strict(),
+  external_exports.object({ ...activityBase, kind: external_exports.literal("message_received"), messageId: id }).strict()
+]);
+var submitSchema = external_exports.object({ sessionId: id, revision }).strict();
+var userBase = { sessionId: id, expectedRevision: revision };
+var userActionSchema = external_exports.discriminatedUnion("type", [
+  external_exports.object({ ...userBase, type: external_exports.literal("approve") }).strict(),
+  external_exports.object({ ...userBase, type: external_exports.literal("pause") }).strict(),
+  external_exports.object({ ...userBase, type: external_exports.literal("accept") }).strict(),
+  external_exports.object({ ...userBase, type: external_exports.literal("requestChanges"), message: text }).strict(),
+  external_exports.object({ ...userBase, type: external_exports.literal("requestAi"), message: text }).strict(),
+  external_exports.object({
+    ...userBase,
+    type: external_exports.literal("edit"),
+    nodes: planFields.nodes,
+    title: short.optional(),
+    goal: text.optional(),
+    context: external_exports.array(text).max(50).optional(),
+    agents: planFields.agents.optional()
+  }).strict()
+]);
+
+// src/mcp/artifacts.ts
+var MB = 1024 * 1024;
+var TYPES = [
+  { ext: "png", mime: "image/png", limit: 10 * MB, magic: (b) => b[0] === 137 && b.toString("latin1", 1, 4) === "PNG" },
+  { ext: "jpg", mime: "image/jpeg", limit: 10 * MB, magic: (b) => b[0] === 255 && b[1] === 216 && b[2] === 255 },
+  { ext: "gif", mime: "image/gif", limit: 16 * MB, magic: (b) => b.toString("latin1", 0, 4) === "GIF8" },
+  { ext: "webp", mime: "image/webp", limit: 10 * MB, magic: (b) => b.toString("latin1", 0, 4) === "RIFF" && b.toString("latin1", 8, 12) === "WEBP" },
+  { ext: "mp4", mime: "video/mp4", limit: 16 * MB, magic: (b) => b.toString("latin1", 4, 8) === "ftyp" },
+  { ext: "webm", mime: "video/webm", limit: 16 * MB, magic: (b) => b[0] === 26 && b[1] === 69 && b[2] === 223 && b[3] === 163 }
+];
+var artifactMime = (id2) => TYPES.find((t) => id2.endsWith(`.${t.ext}`))?.mime ?? "application/octet-stream";
+var ArtifactStore = class {
+  constructor(directory) {
+    this.directory = directory;
+  }
+  directory;
+  /** Copies a local image or video into the store and returns its id. Only real PNG/JPEG/GIF/WebP/MP4/WebM files are accepted. */
+  async ingest(path) {
+    const file2 = path.startsWith("~/") ? join2(homedir(), path.slice(2)) : path;
+    if (!isAbsolute(file2)) throw new Error(`\u622A\u56FE\u6216\u5F55\u50CF\u8BF7\u7ED9\u7EDD\u5BF9\u8DEF\u5F84\uFF1A${path}`);
+    let info;
+    try {
+      info = await stat2(file2);
+    } catch {
+      throw new Error(`\u627E\u4E0D\u5230\u622A\u56FE\u6216\u5F55\u50CF\u6587\u4EF6\uFF1A${path}`);
+    }
+    if (!info.isFile()) throw new Error(`\u4E0D\u662F\u6587\u4EF6\uFF1A${path}`);
+    const head = Buffer.alloc(16);
+    const handle = await open3(file2, "r");
+    try {
+      await handle.read(head, 0, 16, 0);
+    } finally {
+      await handle.close();
+    }
+    const type = TYPES.find((t) => t.magic(head));
+    if (!type) throw new Error(`\u53EA\u652F\u6301 PNG\u3001JPEG\u3001GIF\u3001WebP \u622A\u56FE\u548C MP4\u3001WebM \u5F55\u50CF\uFF1A${path}`);
+    if (info.size > type.limit) throw new Error(`\u6587\u4EF6\u592A\u5927\uFF08${(info.size / MB).toFixed(1)} MB\uFF09\uFF0C${type.ext.toUpperCase()} \u6700\u591A ${type.limit / MB} MB\uFF1A${path}`);
+    const bytes = await readFile2(file2);
+    const id2 = `${createHash("sha256").update(bytes).digest("hex")}.${type.ext}`;
+    await mkdir2(this.directory, { recursive: true, mode: 448 });
+    const target = join2(this.directory, id2);
+    try {
+      await stat2(target);
+    } catch {
+      await writeFile(target, bytes, { mode: 384 });
+    }
+    return id2;
+  }
+  async read(id2) {
+    if (!ARTIFACT_ID.test(id2)) throw new Error("\u8BC1\u636E\u6587\u4EF6\u7F16\u53F7\u65E0\u6548");
+    try {
+      return { id: id2, mimeType: artifactMime(id2), data: (await readFile2(join2(this.directory, id2))).toString("base64") };
+    } catch {
+      throw new Error("\u8BC1\u636E\u6587\u4EF6\u4E0D\u5B58\u5728\u6216\u5DF2\u88AB\u5220\u9664");
+    }
+  }
+  /** Replaces local media paths in sample results with stored artifact ids; the original path stays for reference. */
+  async storeProofs(results) {
+    if (!results) return results;
+    return Promise.all(results.map(async (r2) => ({
+      ...r2,
+      proof: await Promise.all((r2.proof ?? []).map(async (p2) => (p2.kind === "image" || p2.kind === "video") && p2.path && !p2.artifact ? { ...p2, artifact: await this.ingest(p2.path) } : p2))
+    })));
   }
 };
 
@@ -36746,10 +36933,6 @@ var ExperimentalMcpServerTasks = class {
   }
 };
 
-// node_modules/.pnpm/zod@4.6.7/node_modules/zod/index.js
-init_external();
-init_external();
-
 // node_modules/.pnpm/@modelcontextprotocol+sdk@1.32.2_zod@4.6.7/node_modules/@modelcontextprotocol/sdk/dist/esm/server/mcp.js
 function toolInputElementCount(value, max) {
   let count = 0;
@@ -37692,95 +37875,7 @@ function Y3(Z) {
 }
 
 // src/mcp/core.ts
-import { createHash, randomUUID as randomUUID2, timingSafeEqual } from "node:crypto";
-
-// src/mcp/schema.ts
-var id = external_exports.string().trim().min(1).max(120).regex(/^[^\s\u0000-\u001f]+$/u, "ID \u4E0D\u80FD\u5305\u542B\u7A7A\u767D\u6216\u63A7\u5236\u5B57\u7B26");
-var text = external_exports.string().trim().min(1).max(12e3);
-var short = external_exports.string().trim().min(1).max(300);
-var revision = external_exports.number().int().positive();
-var caseSchema = external_exports.object({ kind: external_exports.enum(["normal", "boundary", "extreme"]), input: text, expected: text }).strict();
-var nodeSchema = external_exports.object({
-  // result: an effect the person can see; test: how that effect is proven (who set it is recorded in `by`).
-  id,
-  parentId: id.nullable(),
-  kind: external_exports.enum(["group", "result", "test", "action", "condition", "agent"]),
-  by: external_exports.enum(["user", "agent"]).optional(),
-  title: short,
-  action: external_exports.string().max(12e3).default(""),
-  target: external_exports.string().max(2e3).default(""),
-  input: external_exports.string().max(12e3).default(""),
-  acceptance: external_exports.array(text).max(30).default([]),
-  failure: external_exports.string().max(12e3).default(""),
-  dependsOn: external_exports.array(id).max(100).default([]),
-  // What the step produces, one paragraph on how input becomes output, the limits it must respect, and its test samples.
-  output: external_exports.string().trim().max(12e3).optional(),
-  mapping: external_exports.string().trim().max(12e3).optional(),
-  constraints: external_exports.array(text).max(30).optional(),
-  cases: external_exports.array(caseSchema).max(30).optional(),
-  when: external_exports.object({ nodeId: id, outcome: external_exports.boolean() }).strict().optional(),
-  agentId: id.default("main")
-}).strict();
-var agentSchema = external_exports.object({
-  id,
-  name: short,
-  role: text,
-  scope: text,
-  budget: text,
-  parentId: id.optional()
-}).strict();
-var clarificationSchema = external_exports.object({ question: text, answer: external_exports.string().trim().max(12e3).optional() }).strict();
-var planFields = {
-  title: short,
-  goal: text,
-  context: external_exports.array(text).max(50).default([]),
-  nodes: external_exports.array(nodeSchema).min(2).max(100),
-  agents: external_exports.array(agentSchema).min(1).max(20),
-  clarifications: external_exports.array(clarificationSchema).max(30).optional()
-};
-var proposeSchema = external_exports.object({
-  sessionId: id.optional(),
-  expectedRevision: revision.optional(),
-  ...planFields
-}).strict();
-var claimSchema = external_exports.object({ sessionId: id, revision, nodeId: id, agentId: id }).strict();
-var reportSchema = external_exports.object({
-  sessionId: id,
-  attemptId: id,
-  claimToken: id,
-  eventId: id,
-  status: external_exports.enum(["progress", "passed", "failed", "blocked"]),
-  summary: text,
-  evidence: external_exports.array(text).max(50).default([]),
-  checks: external_exports.array(external_exports.object({ criterion: text, passed: external_exports.boolean(), evidence: text }).strict()).max(30).default([]),
-  conditionOutcome: external_exports.union([external_exports.boolean(), external_exports.literal("unknown")]).optional()
-}).strict();
-var activityBase = { sessionId: id, attemptId: id, claimToken: id, eventId: id, summary: text, runtimeAgentId: id.optional() };
-var activitySchema = external_exports.discriminatedUnion("kind", [
-  external_exports.object({ ...activityBase, kind: external_exports.literal("action"), target: external_exports.string().trim().max(2e3).optional() }).strict(),
-  external_exports.object({ ...activityBase, kind: external_exports.literal("message_sent"), messageId: id, toAgentId: id, toNodeId: id.optional() }).strict(),
-  external_exports.object({ ...activityBase, kind: external_exports.literal("message_received"), messageId: id }).strict()
-]);
-var submitSchema = external_exports.object({ sessionId: id, revision }).strict();
-var userBase = { sessionId: id, expectedRevision: revision };
-var userActionSchema = external_exports.discriminatedUnion("type", [
-  external_exports.object({ ...userBase, type: external_exports.literal("approve") }).strict(),
-  external_exports.object({ ...userBase, type: external_exports.literal("pause") }).strict(),
-  external_exports.object({ ...userBase, type: external_exports.literal("accept") }).strict(),
-  external_exports.object({ ...userBase, type: external_exports.literal("requestChanges"), message: text }).strict(),
-  external_exports.object({ ...userBase, type: external_exports.literal("requestAi"), message: text }).strict(),
-  external_exports.object({
-    ...userBase,
-    type: external_exports.literal("edit"),
-    nodes: planFields.nodes,
-    title: short.optional(),
-    goal: text.optional(),
-    context: external_exports.array(text).max(50).optional(),
-    agents: planFields.agents.optional()
-  }).strict()
-]);
-
-// src/mcp/core.ts
+import { createHash as createHash2, randomUUID as randomUUID2, timingSafeEqual } from "node:crypto";
 var clone2 = (value) => structuredClone(value);
 var now = () => (/* @__PURE__ */ new Date()).toISOString();
 function canonical(value) {
@@ -37790,7 +37885,7 @@ function canonical(value) {
   }
   return JSON.stringify(value);
 }
-var hash2 = (value) => createHash("sha256").update(canonical(value)).digest("hex");
+var hash2 = (value) => createHash2("sha256").update(canonical(value)).digest("hex");
 var isContainer = (node2) => node2.kind === "group" || node2.kind === "result";
 var spec = (node2) => ({
   id: node2.id,
@@ -37905,6 +38000,19 @@ function assertUserTestsKept(previous, next) {
       throw new Error(`\u7528\u6237\u8BBE\u5B9A\u7684\u6D4B\u8BD5\u4E0D\u80FD\u7531 Agent \u4FEE\u6539\u6216\u5220\u9664\uFF1A${test.title}\u3002\u5982\u9700\u8C03\u6574\uFF0C\u8BF7\u8BA9\u7528\u6237\u5728\u6811\u4E2D\u7F16\u8F91\u3002`);
     }
   }
+}
+function planGaps(nodes) {
+  const names = { normal: "\u6B63\u5E38\u60C5\u51B5", boundary: "\u8FB9\u754C\u60C5\u51B5", extreme: "\u6781\u7AEF\u60C5\u51B5" };
+  return nodes.flatMap((node2) => {
+    const missing = [];
+    if (!node2.input.trim()) missing.push("\u8F93\u5165");
+    if (!(node2.output || node2.kind === "result" && node2.action.trim())) missing.push("\u8F93\u51FA");
+    if (!node2.mapping) missing.push("\u63CF\u8FF0");
+    if (!isContainer(node2)) {
+      for (const [kind, name] of Object.entries(names)) if (!node2.cases?.some((c) => c.kind === kind)) missing.push(`${name}\u6837\u4F8B`);
+    }
+    return missing.length ? [`\u300C${node2.title}\u300D\uFF08${node2.id}\uFF09\uFF1A\u7F3A${missing.join("\u3001")}`] : [];
+  });
 }
 var ArborunService = class {
   state;
@@ -38132,6 +38240,7 @@ var ArborunService = class {
       node2.result = void 0;
       node2.evidence = [];
       node2.conditionOutcome = void 0;
+      node2.caseResults = void 0;
       this.event(task, "node_started", `${node2.title}\uFF1A\u5BBF\u4E3B Agent \u5DF2\u9886\u53D6\uFF0C\u7B49\u5F85\u5B9E\u9645\u6267\u884C\u8BB0\u5F55\u3002`, "agent_reported", { nodeId: node2.id, agentId: parsed.agentId, attemptId });
     });
     this.state.grants.push({ attemptId, token: claimToken });
@@ -38139,6 +38248,8 @@ var ArborunService = class {
   }
   report(input2) {
     const parsed = reportSchema.parse(input2), digest = hash2(parsed);
+    for (const r2 of parsed.caseResults) for (const p2 of r2.proof) if (p2.output && p2.output.length > 8e3) p2.output = `\u2026\uFF08\u524D\u9762\u7701\u7565 ${p2.output.length - 8e3} \u5B57\uFF09
+${p2.output.slice(-8e3)}`;
     return this.transaction(parsed.sessionId, (session) => {
       const duplicate = session.events.find((event) => event.id === parsed.eventId);
       if (duplicate) {
@@ -38152,8 +38263,15 @@ var ArborunService = class {
       if (attempt.lateStatus) throw new Error("\u5931\u6548\u6267\u884C\u7684\u6700\u7EC8\u7ED3\u679C\u5DF2\u8BB0\u5F55");
       const node2 = session.nodes.find((n) => n.id === attempt.nodeId);
       const outdated = Boolean(attempt.invalidated || attempt.revision !== session.revision || session.approval?.id !== attempt.approvalId);
+      const cases = attempt.specification.cases ?? [];
+      if (new Set(parsed.caseResults.map((r2) => r2.case)).size !== parsed.caseResults.length) throw new Error("\u540C\u4E00\u4E2A\u6D4B\u8BD5\u6837\u4F8B\u53EA\u80FD\u4E0A\u62A5\u4E00\u4E2A\u7ED3\u679C");
+      if (parsed.caseResults.some((r2) => r2.case >= cases.length)) throw new Error("\u6D4B\u8BD5\u6837\u4F8B\u7F16\u53F7\u8D85\u51FA\u8303\u56F4\uFF1A\u4ECE 0 \u5F00\u59CB\uFF0C\u6309 cases \u7684\u987A\u5E8F");
+      const merged = [...(attempt.caseResults ?? []).filter((r2) => !parsed.caseResults.some((n) => n.case === r2.case)), ...clone2(parsed.caseResults)].sort((a, b) => a.case - b.case);
       if (!outdated && parsed.status === "passed") {
-        if (parsed.evidence.length === 0) throw new Error("\u901A\u8FC7\u8282\u70B9\u9700\u8981\u63D0\u4EA4\u8BC1\u636E");
+        if (parsed.evidence.length === 0 && !merged.some((r2) => r2.proof.length)) throw new Error("\u901A\u8FC7\u8282\u70B9\u9700\u8981\u63D0\u4EA4\u8BC1\u636E");
+        if (cases.some((_2, i) => !merged.some((r2) => r2.case === i))) throw new Error("\u901A\u8FC7\u524D\u9700\u8981\u4E0A\u62A5\u6BCF\u4E2A\u6D4B\u8BD5\u6837\u4F8B\u7684\u7ED3\u679C");
+        if (merged.some((r2) => !r2.passed)) throw new Error("\u6709\u6D4B\u8BD5\u6837\u4F8B\u672A\u901A\u8FC7\uFF0C\u8282\u70B9\u4E0D\u80FD\u62A5\u544A\u901A\u8FC7");
+        if (merged.some((r2) => !r2.proof.length)) throw new Error("\u6BCF\u4E2A\u6D4B\u8BD5\u6837\u4F8B\u90FD\u9700\u8981\u770B\u5F97\u61C2\u7684\u8BC1\u636E\uFF1A\u547D\u4EE4\u884C\u8F93\u51FA\u3001\u622A\u56FE\u3001\u6F14\u793A\u5F55\u50CF\u3001\u6587\u5B57\u6216\u94FE\u63A5");
         if (attempt.specification.acceptance.some((criterion) => !parsed.checks.some((check2) => check2.criterion === criterion && check2.passed))) throw new Error("\u6BCF\u9879\u901A\u8FC7\u6761\u4EF6\u90FD\u9700\u8981\u660E\u786E\u7684\u6210\u529F\u68C0\u67E5\u4E0E\u8BC1\u636E");
         if (parsed.checks.some((check2) => !check2.passed || !attempt.specification.acceptance.includes(check2.criterion))) throw new Error("\u68C0\u67E5\u5931\u8D25\u6216\u68C0\u67E5\u9879\u4E0D\u5C5E\u4E8E\u5F53\u524D\u8282\u70B9");
         if (attempt.specification.kind === "condition" && typeof parsed.conditionOutcome !== "boolean") throw new Error("\u6761\u4EF6\u8282\u70B9\u901A\u8FC7\u9700\u8981\u660E\u786E true \u6216 false\uFF1Bunknown \u5E94\u62A5\u544A blocked");
@@ -38165,6 +38283,7 @@ var ArborunService = class {
       attempt.summary = parsed.summary;
       attempt.evidence = clone2(parsed.evidence);
       attempt.checks = clone2(parsed.checks);
+      if (merged.length) attempt.caseResults = merged;
       if (parsed.conditionOutcome !== void 0) attempt.conditionOutcome = parsed.conditionOutcome;
       if (outdated) {
         attempt.invalidated = true;
@@ -38181,6 +38300,7 @@ var ArborunService = class {
           node2.status = parsed.status === "progress" ? "running" : parsed.status;
           node2.result = parsed.summary;
           node2.evidence = clone2(parsed.evidence);
+          if (merged.length) node2.caseResults = clone2(merged);
           if (parsed.conditionOutcome !== void 0) node2.conditionOutcome = parsed.conditionOutcome;
         }
       }
@@ -38334,7 +38454,10 @@ var ArborunService = class {
         if (node2.mapping || node2.constraints?.length) details.push(`\u600E\u4E48\u505A\uFF1A${[node2.mapping, ...(node2.constraints ?? []).map((c) => `\u6CE8\u610F${c}`)].filter(Boolean).join("\uFF1B")}`);
         details.push(`\u901A\u8FC7\u6761\u4EF6\uFF1A${node2.acceptance.join("\uFF1B")}`, `\u5931\u8D25\u5904\u7406\uFF1A${node2.failure}`);
         const caseNames = { normal: "\u6B63\u5E38\u60C5\u51B5", boundary: "\u8FB9\u754C\u60C5\u51B5", extreme: "\u6781\u7AEF\u60C5\u51B5" };
-        for (const c of node2.cases ?? []) details.push(`\u6D4B\u8BD5\u6837\u4F8B\xB7${caseNames[c.kind]}\uFF1A${c.input} \u2192 ${c.expected}`);
+        (node2.cases ?? []).forEach((c, i) => {
+          const r2 = node2.caseResults?.find((x) => x.case === i);
+          details.push(`\u6D4B\u8BD5\u6837\u4F8B ${i}\xB7${caseNames[c.kind]}\uFF1A${c.input} \u2192 ${c.expected}${r2 ? `\uFF5C${r2.passed ? "\u901A\u8FC7" : "\u672A\u901A\u8FC7"}\uFF1A${r2.actual}${r2.proof.length ? `\uFF08\u8BC1\u636E ${r2.proof.length} \u9879\uFF09` : ""}` : ""}`);
+        });
         if (node2.dependsOn.length) details.push(`\u6267\u884C\u4F9D\u8D56\uFF1A${node2.dependsOn.join("\u3001")}`);
         if (node2.conditionOutcome !== void 0) details.push(`\u6761\u4EF6\u7ED3\u679C\uFF1A${node2.conditionOutcome}`);
         if (node2.attemptId) details.push(`\u6267\u884C\u8BB0\u5F55\uFF1A${node2.attemptId}`);
@@ -38359,7 +38482,7 @@ var ArborunRuntime = class {
     this.options = options;
     this.service = new ArborunService(options.snapshot, { recover: true });
     this.mcp = new McpServer({ name: "arborun", version: "0.2.3" }, {
-      instructions: 'Arborun coordinates a user-editable execution tree, built around what the user will check. Before proposing a plan, ask the user in the normal conversation to resolve missing requirements and decisions; record confirmed answers in clarifications and never put unanswered requirements into the tree. Plan with the root children as the trunk in order; put each visible outcome in a kind=result node, with kind=test nodes under it ("when ..., you should see ...", by=user for tests the user stated or confirmed, by=agent for tests you add) and the action nodes that implement it. Each action/test states target, input, output, a one-paragraph mapping of how the input becomes the output, constraints, acceptance and failure route, and generate cases: concrete samples with at least one normal value, one boundary case and one extreme case, each with input and expected output. Write every field briefly in plain everyday words a non-expert can follow: short sentences, no jargon or code terms unless the user used them; mapping is one or two sentences covering how and what to watch for; never repeat the same point in two fields. Show the tree and stop for the user to approve it in the Arborun panel; never approve or accept for the user and never use browser automation on the panel. After approval read the latest revision, claim each node before acting, do the work with your own tools, report actual evidence and checks, report observable actions and messages through arborun_activity, then submit the results tree for human acceptance. Continue normal conversation output. A changed plan revokes approval; do not continue with old claims. If the host cannot show the panel, Arborun opens it in the local browser.'
+      instructions: 'Arborun is for large, open-ended, loosely specified work that cannot be done in one pass, such as training a model or writing a research paper. It keeps that work as a user-editable tree the person checks by results, not by code. Before proposing a plan, ask the user in the normal conversation to resolve missing requirements and decisions; record confirmed answers in clarifications and never put unanswered requirements into the tree. Break the work into stages (root children, in order) whose outcomes a person can check; put each checkable outcome in a kind=result node, with kind=test nodes under it ("when ..., you should see ...", by=user for tests the user stated or confirmed, by=agent for tests you add) and the action nodes that produce it. Every node, the root included, reads as four parts: input, output, description (mapping: one or two sentences on how the input becomes the output; constraints for what to watch for) and tests. Each action/test also states target, acceptance and failure route, and generated cases: concrete samples with at least one normal, one boundary and one extreme case, each with input and expected output. Write every field briefly in plain everyday words a non-expert can follow: short sentences, no jargon unless the user used it; never repeat the same point in two fields. Show the tree and stop for the user to approve it in the Arborun panel; never approve or accept for the user and never use browser automation on the panel. After approval read the latest revision, claim each node before acting, do the work with your own tools, and report through arborun_report: for every sample a caseResults entry with what actually happened and proof a person can read without opening code - the command you ran and its output, a screenshot, a short demo recording (local file paths; Arborun stores them), plain text or a link. Report observable actions and messages through arborun_activity, then submit the results tree for human acceptance. Continue normal conversation output. A changed plan revokes approval; do not continue with old claims. If the host cannot show the panel, Arborun opens it in the local browser.'
     });
     this.register();
   }
@@ -38438,11 +38561,20 @@ var ArborunRuntime = class {
     }, safe(async (args) => this.result(await this.read(args.sessionId, args.afterSequence))));
     K3(this.mcp, "arborun_plan", {
       title: "\u751F\u6210\u6216\u4FEE\u6539\u6267\u884C\u6811",
-      description: 'Ask unresolved requirement questions in the normal host conversation first, then propose a concrete tree from confirmed requirements and relevant context. Provide confirmed question/answer records in clarifications; unanswered records are rejected without creating or changing a tree. Organise the tree around what the user will check: the children of the root are the trunk in order; put each visible outcome in a kind=result node whose action states the effect, and under it kind=test nodes ("\u5F53\u2026\u2026\u65F6\uFF0C\u5E94\u8BE5\u770B\u5230\u2026\u2026", with by=user for tests the user stated or confirmed, by=agent for tests you add) plus the action nodes that implement it. Each action/test needs target, input, output, mapping (one paragraph: how the input becomes the output), constraints, acceptance and failure route, plus generated cases with kind normal, boundary and extreme (at least one of each; concrete input and expected output). Keep every text short, in plain words a non-expert understands, and say each point once. Tests the user set cannot be changed or removed by a plan update. Parent is containment; dependsOn is execution dependency. Conditional nodes use when; each planned agent has role/scope/budget. Updating requires expectedRevision and always revokes old approval. Then show UI and wait for the user.',
+      description: 'Ask unresolved requirement questions in the normal host conversation first, then propose a concrete tree from confirmed requirements and relevant context. Provide confirmed question/answer records in clarifications; unanswered records are rejected without creating or changing a tree. Arborun is for large, open-ended work that cannot be done in one pass (train a model, write a paper). Organise the tree around what the user will check: the children of the root are the stages in order; put each checkable outcome in a kind=result node whose action states the effect, and under it kind=test nodes ("\u5F53\u2026\u2026\u65F6\uFF0C\u5E94\u8BE5\u770B\u5230\u2026\u2026", with by=user for tests the user stated or confirmed, by=agent for tests you add) plus the action nodes that implement it. Every node, the root included, has input, output and mapping (one or two sentences: how the input becomes the output) plus constraints. Each action/test also needs target, acceptance and failure route, plus generated cases with kind normal, boundary and extreme (at least one of each; concrete input and expected output). Keep every text short, in plain words a non-expert understands, and say each point once. Tests the user set cannot be changed or removed by a plan update. Parent is containment; dependsOn is execution dependency. Conditional nodes use when; each planned agent has role/scope/budget. Updating requires expectedRevision and always revokes old approval. Then show UI and wait for the user.',
       inputSchema: proposeSchema,
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       _meta: { ui: { resourceUri: RESOURCE }, "openai/ui": display }
-    }, safe(async (args) => this.result({ session: await this.mutate((s) => s.propose(args)) })));
+    }, safe(async (args) => {
+      const reply = this.result({ session: await this.mutate((s) => s.propose(args)) });
+      const gaps = planGaps(reply.structuredContent.session.nodes);
+      if (gaps.length) reply.content[0].text += `
+
+\u8FD8\u6CA1\u5199\u5168\u7684\u90E8\u5206\uFF08\u6BCF\u4E2A\u8282\u70B9\u90FD\u5E94\u6709\u8F93\u5165\u3001\u8F93\u51FA\u3001\u63CF\u8FF0\u548C\u6D4B\u8BD5\uFF1B\u8BF7\u7528 arborun_plan \u8865\u5168\u540E\u518D\u8BF7\u7528\u6237\u6279\u51C6\uFF09\uFF1A
+${gaps.slice(0, 20).map((g) => `- ${g}`).join("\n")}${gaps.length > 20 ? `
+- \u53E6\u6709 ${gaps.length - 20} \u4E2A\u8282\u70B9` : ""}`;
+      return reply;
+    }));
     K3(this.mcp, "arborun_claim", {
       title: "\u9886\u53D6\u6267\u884C\u8282\u70B9",
       description: "Claim an approved, ready node for its declared agent immediately before actual host work. Returns attemptId and claimToken; do not perform work when rejected. Registration in a plan is not creation of a real subagent. Use host agent tools to create workers only after corresponding approval.",
@@ -38452,11 +38584,14 @@ var ArborunRuntime = class {
     }, safe(async (args) => this.result(await this.mutate((s) => s.claim(args)))));
     K3(this.mcp, "arborun_report", {
       title: "\u8BB0\u5F55\u6267\u884C\u8FDB\u5EA6\u4E0E\u7ED3\u679C",
-      description: "Report actual host work for the claimed attempt using claimToken and unique eventId. Include evidence and checks matching every acceptance criterion before passed. Condition must report true/false/unknown explicitly. Evidence is agent-reported, never automatically host-verified. Late results go to history; read current tree before continuing.",
+      description: "Report actual host work for the claimed attempt using claimToken and unique eventId. Include evidence and checks matching every acceptance criterion before passed. For each sample in the node's cases (case = its 0-based position) add a caseResults entry: passed, actual (what really happened, in plain words) and proof a person can read without code - kind=command with the command and its output (last part is enough), kind=image or kind=video with an absolute local path to a PNG/JPEG/GIF/WebP screenshot or a short MP4/WebM/GIF demo (Arborun copies the file), kind=text, or kind=link. Progress reports may add sample results one at a time. passed requires every sample reported, all passed, each with proof. Condition must report true/false/unknown explicitly. Evidence is agent-reported, never automatically host-verified. Late results go to history; read current tree before continuing.",
       inputSchema: reportSchema,
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       _meta: { ui: { visibility: ["model"] } }
-    }, safe(async (args) => this.result({ session: await this.mutate((s) => s.report(args)) })));
+    }, safe(async (args) => {
+      const caseResults = this.options.artifacts ? await this.options.artifacts.storeProofs(args.caseResults) : args.caseResults;
+      return this.result({ session: await this.mutate((s) => s.report({ ...args, ...caseResults ? { caseResults } : {} })) });
+    }));
     K3(this.mcp, "arborun_activity", {
       title: "\u8BB0\u5F55 Agent \u52A8\u4F5C\u4E0E\u6D88\u606F",
       description: "Observe actual host actions and inter-agent messages for a current approved running attempt. Authenticate with its claimToken and unique eventId. action records observable work, never private reasoning; runtimeAgentId identifies the actual host instance as an agent-reported label. After a real host message send, record message_sent with a unique messageId and declared recipient; only that recipient can record message_received using its own active claim. This tool does not send messages, start agents, infer delivery, or replace normal Codex conversation output. Old/invalid attempts are rejected.",
@@ -38478,6 +38613,18 @@ var ArborunRuntime = class {
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       _meta: { ui: { resourceUri: RESOURCE }, "openai/ui": display }
     }, safe(async (args) => this.result({ session: await this.mutate((s) => s.submit(args)) })));
+    K3(this.mcp, "arborun_artifact", {
+      title: "\u8BFB\u53D6\u8BC1\u636E\u6587\u4EF6",
+      description: "App-only: load a stored screenshot or demo recording for display. Do not invoke from the model.",
+      inputSchema: external_exports.object({ uiToken: external_exports.string(), id: external_exports.string() }).strict(),
+      annotations: { readOnlyHint: true, openWorldHint: false },
+      _meta: { ui: { visibility: ["app"], resourceUri: RESOURCE } }
+    }, safe(async ({ uiToken, id: id2 }) => {
+      if (!this.authorized(uiToken)) throw new Error("\u6B64\u64CD\u4F5C\u9700\u8981\u6811\u754C\u9762\u7684\u7528\u6237\u64CD\u4F5C\u51ED\u8BC1\u3002");
+      if (!this.options.artifacts) throw new Error("\u6B64\u670D\u52A1\u672A\u4FDD\u5B58\u8BC1\u636E\u6587\u4EF6\u3002");
+      const file2 = await this.options.artifacts.read(id2);
+      return { content: [{ type: "text", text: `\u8BC1\u636E\u6587\u4EF6 ${id2}` }], structuredContent: file2 };
+    }));
     K3(this.mcp, "arborun_user", {
       title: "\u6811\u7684\u7528\u6237\u64CD\u4F5C",
       description: "App-only user gestures: edit plan, request AI changes, approve current revision, pause, accept or return results. Do not invoke from the model.",
@@ -38502,7 +38649,7 @@ var ArborunRuntime = class {
       const url2 = new URL(request.url ?? "/", origin);
       if (url2.pathname === "/" && request.method === "GET") {
         response.setHeader("Content-Type", "text/html; charset=utf-8");
-        response.setHeader("Content-Security-Policy", "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; font-src data:; frame-ancestors 'self'");
+        response.setHeader("Content-Security-Policy", "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; media-src 'self' data:; font-src data:; frame-ancestors 'self'");
         response.end(this.options.html);
         return;
       }
@@ -38514,6 +38661,11 @@ var ArborunRuntime = class {
       try {
         if (url2.pathname === "/api/read" && request.method === "GET") {
           response.end(JSON.stringify(await this.read(url2.searchParams.get("sessionId") ?? void 0)));
+          return;
+        }
+        if (url2.pathname === "/api/artifact" && request.method === "GET") {
+          if (!this.options.artifacts) throw new Error("\u6B64\u670D\u52A1\u672A\u4FDD\u5B58\u8BC1\u636E\u6587\u4EF6\u3002");
+          response.end(JSON.stringify(await this.options.artifacts.read(url2.searchParams.get("id") ?? "")));
           return;
         }
         if (url2.pathname === "/api/user" && request.method === "POST") {
@@ -38570,7 +38722,7 @@ function openUrl(url2) {
     return false;
   }
 }
-var data = new SnapshotFile(resolve2(process.env.ARBORUN_MCP_DATA_DIR ?? join3(homedir2(), ".arborun", "data")));
+var data = new SnapshotFile(resolve2(process.env.ARBORUN_MCP_DATA_DIR ?? join4(homedir3(), ".arborun", "data")));
 var runtime;
 var http;
 var stopping = false;
@@ -38588,7 +38740,8 @@ try {
     snapshot: await data.load(),
     save: (value) => data.save(value),
     openUrl,
-    html: await readFile3(join3(dirname2(fileURLToPath2(import.meta.url)), "tree.html"), "utf8")
+    artifacts: new ArtifactStore(join4(data.directory, "artifacts")),
+    html: await readFile4(join4(dirname2(fileURLToPath2(import.meta.url)), "tree.html"), "utf8")
   });
   await runtime.persistRecovery();
   const portArg = process.argv.indexOf("--port");

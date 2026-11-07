@@ -102,7 +102,7 @@ if (process.argv.includes('--self-test')) {
     const pathname = new URL(request.url ?? '/', origin).pathname;
     if (pathname === '/' && request.method === 'GET') {
       response.setHeader('Content-Type', 'text/html; charset=utf-8');
-      response.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-src 'self'; img-src 'self' data:; font-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
+      response.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-src 'self'; img-src 'self' data:; media-src 'self' data:; font-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
       response.end(hostPage()); return;
     }
     if (pathname === '/host.js' && request.method === 'GET') {

@@ -130,6 +130,27 @@ export class TreeBridge {
     return this.unpack(reply, !this.currentSessionId || this.currentSessionId === action.sessionId);
   }
 
+  /** A stored screenshot or recording as a data: URL (the app sandbox allows data: images and media). Cached per id. */
+  private artifacts = new Map<string, Promise<string>>();
+  artifact(id: string): Promise<string> {
+    let pending = this.artifacts.get(id);
+    if (!pending) {
+      pending = (async () => {
+        let reply: ToolReply;
+        if (this.local) reply = await this.http(`/api/artifact?id=${encodeURIComponent(id)}`);
+        else {
+          if (!this.app || !this.uiToken) throw new Error('缺少用户界面授权，请重新打开执行树。');
+          reply = await this.app.callServerTool({ name: 'arborun_artifact', arguments: { id, uiToken: this.uiToken } });
+        }
+        const file = this.unpack(reply, false) as unknown as { mimeType: string; data: string };
+        return `data:${file.mimeType};base64,${file.data}`;
+      })();
+      pending.catch(() => this.artifacts.delete(id));
+      this.artifacts.set(id, pending);
+    }
+    return pending;
+  }
+
   async dispose() {
     ++this.readSequence;
     this.onData = undefined;
