@@ -43,6 +43,9 @@ Arborun｜宿主工作流
 │  ├─ parentId 只表示包含；dependsOn 表示执行依赖；when 表示已定义的条件判断结果。
 │  ├─ 运行时才可获得的条件，必须有明确取证动作、true/false 分支和无法取证时的停止路径。
 │  ├─ 所有子 Agent 明确角色、权限范围、预算、触发条件、交接输入和结果采用检查。
+│  ├─ 按工作难度给每个 Agent 配 model、effort（low／medium／high／xhigh）、mode（readonly 只读／ask 改动前先问／auto 自动执行），附一句理由。
+│  │  ├─ 开放的设计、研究、排错：强模型、高 effort；固定脚本类工作：轻模型、低 effort；只检查不改的：readonly。
+│  │  └─ 用户可在“整体任务 → Agent 分工”里修改；启动真实子 Agent 时按这些设置，宿主不支持的项在对话里说明。
 │  ├─ 调用 arborun_read 展示树，等待用户批准当前版本。
 │  ├─ 修改前读取最新 revision，以 expectedRevision 更新；改动撤销原批准。
 │  └─ 不调用 arborun_user，不提取 UI 凭证，不用自动化代替用户批准或验收。

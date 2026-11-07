@@ -5,7 +5,7 @@ import { currentWork } from './collaboration-model';
 import { Avatar, Glyph, MiniBar } from './TreeCanvas';
 import './overview.css';
 
-export const EXPAND_ICON = <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m7 9 5-5 5 5M7 15l5 5 5-5" /></svg>;
+export const EXPAND_ICON = <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" /></svg>;
 
 /** What the overview lists along the trunk: the results a person checks, or the trunk step itself when it holds none. */
 function trunkItems(view: Map<string, ViewNode>, rootId: string): { group?: string; ids: string[] }[] {

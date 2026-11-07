@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import type { NodeSpec, NodeState, Session, UserActionInput } from '../mcp/schema';
+import type { AgentSpec, NodeSpec, NodeState, Session, UserActionInput } from '../mcp/schema';
 import { TreeBridge, type ViewData } from './bridge';
 import { TreeCanvas } from './TreeCanvas';
 import { ACCEPT_ID, TASK_ID } from './canvas-model';
@@ -34,6 +34,12 @@ function Arborun() {
   const [note, setNote] = useState('');
   const [continuation, setContinuation] = useState('');
   const [showRecords, setShowRecords] = useState(false);
+  // The whole task drops down under the title; hovering a node previews its details on the right.
+  const [taskOpen, setTaskOpen] = useState(false);
+  const [hoverId, setHoverId] = useState<string | null>(null);
+  const [hoverLeft, setHoverLeft] = useState(false);
+  const hoverTimer = useRef<number | undefined>(undefined);
+  const overPanel = useRef(false);
   const [locateRequest, setLocateRequest] = useState<{ id: string; key: number }>();
   const [resetRequest, setResetRequest] = useState<{ id?: string; key: number }>();
   // Inline in the conversation the tree starts folded as an overview; elsewhere it starts expanded.
@@ -122,6 +128,19 @@ function Arborun() {
     if (inspector?.mode === 'edit' || inspector?.mode === 'add' || request) { setNotice('请先保存或取消当前编辑。'); return; }
     setSelectedId(id); setRequest(undefined); setInspector({ id, mode, revision: session.revision });
   };
+  // Hover shows a node's details after a short pause and hides them shortly after the pointer leaves,
+  // unless it moved onto the panel. Clicking pins the details; drafts are never replaced by a hover.
+  const hover = (id: string | null) => {
+    window.clearTimeout(hoverTimer.current);
+    if (inspector?.mode === 'edit' || inspector?.mode === 'add' || request) return;
+    hoverTimer.current = window.setTimeout(() => {
+      if (!id && overPanel.current) return;
+      // Never cover the node being hovered: near the right edge the preview opens on the left.
+      if (id) { const node = document.querySelector(`[data-node-id="${CSS.escape(id)}"]`)?.getBoundingClientRect(), area = document.querySelector('.workspace-area')?.getBoundingClientRect();
+        setHoverLeft(Boolean(node && area && node.right > area.right - 420)); }
+      setHoverId(id);
+    }, id ? 140 : 260);
+  };
   const select = (id: string | null) => {
     // Canvas navigation must not move selection away from an open draft.
     if (inspector?.mode === 'edit' || inspector?.mode === 'add' || request) return;
@@ -137,6 +156,11 @@ function Arborun() {
     setSelectedId(node.id);
     setInspector({ id: node.id, mode: 'detail', revision: result.session?.revision ?? session.revision + 1 });
     setNotice('已保存新版本。整任务需重新批准，旧执行记录保留。');
+  });
+  const saveAgents = (agents: AgentSpec[]) => perform(async () => {
+    if (!session) return;
+    await act({ type: 'edit', nodes: specs(session.nodes), agents }, session.revision);
+    setNotice('已保存 Agent 设置。整任务需重新批准。');
   });
   const removeNode = (id: string) => perform(async () => {
     if (!session || !inspector) return;
@@ -206,7 +230,7 @@ function Arborun() {
     {session && overview ? <div ref={overviewRef}><Overview session={session} onExpand={expand} taskActions={taskActions} /></div>
     : !session ? <section className="empty"><h1>{connected ? '等待决策执行树' : '连接执行树'}</h1><p>{connected ? '向当前 Agent 说明任务，让它结合上下文生成 Arborun 执行树。' : '正在连接 MCP 服务。'}</p>{!!sessions?.length && <ul>{sessions.map(s => <li key={s.id}><button onClick={() => void perform(() => bridge.read(s.id))}>{s.title}</button></li>)}</ul>}</section> : <>
       <div className="workspace-area" data-details={Boolean(inspector || request || showRecords)}>
-        <TreeCanvas key={session.id} session={session} selectedId={selectedId} onSelect={select} onOverview={() => { setInspector(undefined); setRequest(undefined); setShowRecords(false); setSelectedId(null); setOverview(true); }} onEnter={id => {
+        <TreeCanvas key={session.id} session={session} selectedId={selectedId} onSelect={id => { setHoverId(null); select(id); }} taskOpen={taskOpen} onTaskToggle={open => setTaskOpen(open ?? !taskOpen)} onHover={hover} onOverview={() => { setInspector(undefined); setRequest(undefined); setShowRecords(false); setSelectedId(null); setOverview(true); }} onEnter={id => {
             if (editing) return;
             // Entering a single step or test opens its detail; entering a subtree starts with the tree alone.
             const entered = session.nodes.find(n => n.id === id);
@@ -215,10 +239,19 @@ function Arborun() {
           }}
           editing={editing} locateRequest={locateRequest} resetRequest={resetRequest} panelOpen={Boolean(inspector || request || showRecords)}
           impact={inspector?.mode === 'edit' && session.nodes.some(n => n.id === inspector.id) ? new Set(previewImpact(session, specs(session.nodes).find(n => n.id === inspector.id)!).map(n => n.id)) : undefined} />
-        {inspector && <NodeInspector key={`${session.id}:${inspector.id}:${inspector.mode}`} session={session} nodeId={inspector.id} mode={inspector.mode} busy={busy} editRevision={inspector.revision}
+        {taskOpen && <div className="task-sheet" role="region" aria-label="整体任务">
+          <NodeInspector key={`${session.id}:task`} session={session} nodeId={TASK_ID} mode="detail" busy={busy} editRevision={session.revision}
+            onClose={() => setTaskOpen(false)} onEdit={() => {}} onSave={saveNode} onDelete={removeNode} onAdd={() => {}} onAskAi={askAi} onGenerateCases={generateCases} loadArtifact={loadArtifact}
+            onLocate={id => { setTaskOpen(false); locate(id); }} onSaveAgents={saveAgents} taskActions={taskActions} />
+        </div>}
+        {(hoverId && hoverId !== inspector?.id && !request && !showRecords) ? <div className={`hover-panel${hoverLeft ? ' left' : ''}`} onMouseEnter={() => { overPanel.current = true; window.clearTimeout(hoverTimer.current); }} onMouseLeave={() => { overPanel.current = false; hover(null); }}>
+          <NodeInspector key={`${session.id}:hover:${hoverId}`} session={session} nodeId={hoverId} mode="detail" busy={busy} editRevision={session.revision}
+            onClose={() => setHoverId(null)} onEdit={() => { setHoverId(null); openInspector(hoverId, 'edit'); }} onSave={saveNode} onDelete={removeNode} onAdd={id => { setHoverId(null); openInspector(id, 'add'); }} onAskAi={askAi} onGenerateCases={generateCases} loadArtifact={loadArtifact}
+            onLocate={id => { setHoverId(null); locate(id); }} taskActions={hoverId === ACCEPT_ID ? taskActions : undefined} />
+        </div> : inspector && <div className="pinned-panel" onMouseEnter={() => { overPanel.current = true; }} onMouseLeave={() => { overPanel.current = false; }}><NodeInspector key={`${session.id}:${inspector.id}:${inspector.mode}`} session={session} nodeId={inspector.id} mode={inspector.mode} busy={busy} editRevision={inspector.revision}
           onClose={() => { setInspector(undefined); setSelectedId(null); }} onEdit={() => openInspector(inspector.id, 'edit')} onSave={saveNode} onDelete={removeNode} onAdd={id => openInspector(id, 'add')} onAskAi={askAi} onGenerateCases={generateCases} loadArtifact={loadArtifact} onLocate={locate}
           onRecords={() => { setInspector(undefined); setShowRecords(true); }} onResetPosition={id => setResetRequest({ id, key: Date.now() })}
-          taskActions={inspector.mode === 'detail' && (inspector.id === TASK_ID || inspector.id === ACCEPT_ID) ? taskActions : undefined} />}
+          taskActions={inspector.mode === 'detail' && (inspector.id === TASK_ID || inspector.id === ACCEPT_ID) ? taskActions : undefined} /></div>}
         {request && <aside className="side-panel request-panel" aria-label={request.rework ? '返工要求' : 'AI 修改要求'}><div className="panel-head"><h2>{request.completed ? '修改要求已保存' : request.rework ? '要求返工' : '让 AI 修改'}</h2><button className="icon-btn" aria-label="关闭" onClick={() => setRequest(undefined)}>×</button></div>
           <p className="panel-status">范围：{request.target ? `${session.nodes.find(n => n.id === request.target)?.title ?? request.target} 及其下所有内容` : '整个任务'}</p>
           {request.completed ? <section className="continuation"><p>若宿主尚未继续，请把这段指令发送到当前对话。</p><textarea aria-label="发送到当前对话" readOnly value={continuation} rows={7} /></section> : <form onSubmit={e => { e.preventDefault(); void requestAi(); }}><label htmlFor="change-request">{request.rework ? '验收意见' : '说明如何修改执行树'}</label><textarea id="change-request" value={note} onChange={e => setNote(e.target.value)} required rows={6} />

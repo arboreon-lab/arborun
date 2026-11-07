@@ -11,7 +11,7 @@ export type ChildMode = 'seq' | 'par' | 'set';
 /** Nodes are circles; layout still works on their square bounding box, so every side midpoint lies on the circle. */
 export const NODE_D = 184, CARD_W = NODE_D, CARD_H = NODE_D, FRAME_HEAD = 36, FRAME_PAD = 16;
 /** Room outside the circle for the agents' progress ring. */
-export const RING_GAP = 7, RING_W = 4.6;
+export const RING_GAP = 6, RING_W = 3;
 export const ACCEPT_ID = '__accept';
 /** The whole task, opened from the title at the top left; not a node in the tree. */
 export const TASK_ID = '__task';
@@ -241,7 +241,9 @@ export function layoutTree(view: Map<string, ViewNode>, scope: string, treeView:
     return { du, dv: cv - GV - v, inP: first!.inP, outP: prev!.outP };
   };
   const scopeNode = view.get(scope)!;
-  const trunk = [scope, ...(scopeNode.mode === 'seq' ? scopeNode.children : [])];
+  // At the top level the path starts at the first stage: there is no separate start node (the task lives under the title).
+  const top = scopeNode.parentId === null && scopeNode.mode === 'seq' && scopeNode.children.length > 0;
+  const trunk = top ? scopeNode.children : [scope, ...(scopeNode.mode === 'seq' ? scopeNode.children : [])];
   let u = 0, prevU: number | null = null;
   trunk.forEach((id, i) => {
     cards.set(id, { u, v: 0 });

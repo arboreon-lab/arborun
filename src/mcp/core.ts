@@ -463,7 +463,10 @@ export class ArborunService {
       const last = index === session.agents.length - 1;
       lines.push(`│  ${last ? '└─' : '├─'} ${line(agent.name)}（${agent.id}）${agent.parentId ? `｜父 Agent：${agent.parentId}` : ''}`);
       const prefix = last ? '│     ' : '│  │  ';
-      lines.push(`${prefix}├─ 分工：${agent.role.replace(/\s+/g, ' ')}`, `${prefix}├─ 范围：${agent.scope.replace(/\s+/g, ' ')}`, `${prefix}└─ 预算约定：${agent.budget.replace(/\s+/g, ' ')}`);
+      const effort = { low: '低', medium: '中', high: '高', xhigh: '很高' } as const, mode = { readonly: '只读', ask: '改动前先问', auto: '自动执行' } as const;
+      const config = [agent.model && `模型 ${agent.model}`, agent.effort && `思考力度 ${effort[agent.effort]}（${agent.effort}）`, agent.mode && `方式 ${mode[agent.mode]}（${agent.mode}）`].filter(Boolean).join('｜');
+      lines.push(`${prefix}├─ 分工：${agent.role.replace(/\s+/g, ' ')}`, `${prefix}├─ 范围：${agent.scope.replace(/\s+/g, ' ')}`,
+        ...(config ? [`${prefix}├─ 配置：${config}${agent.reason ? `｜理由：${agent.reason.replace(/\s+/g, ' ')}` : ''}`] : []), `${prefix}└─ 预算约定：${agent.budget.replace(/\s+/g, ' ')}`);
     });
     const root = session.nodes.find(n => n.parentId === null)!;
     const visit = (node: NodeState, prefix: string, last: boolean) => {

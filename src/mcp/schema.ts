@@ -22,6 +22,11 @@ export const nodeSchema = z.object({
 }).strict();
 export const agentSchema = z.object({
   id, name: short, role: text, scope: text, budget: text, parentId: id.optional(),
+  // Chosen by how hard this agent's work is; the user may change them. Hosts apply what they support.
+  model: z.string().trim().min(1).max(100).optional(),
+  effort: z.enum(['low', 'medium', 'high', 'xhigh']).optional(),
+  mode: z.enum(['readonly', 'ask', 'auto']).optional(),
+  reason: z.string().trim().max(300).optional(),
 }).strict();
 export const clarificationSchema = z.object({ question: text, answer: z.string().trim().max(12000).optional() }).strict();
 const planFields = {

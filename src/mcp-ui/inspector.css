@@ -127,3 +127,11 @@ video.media { width: 100%; cursor: auto; }
 .part-io .io-in { padding-right: 2px; }
 .part-io .io-arrow { align-self: center; font-size: 22px; color: var(--muted); padding-top: 18px; }
 .part-io .where { flex-wrap: wrap; gap: 4px 8px; }
+
+/* Agent settings: model, effort and mode. */
+.agent-config { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 2px; }
+.chip-flat { font-size: 12.5px; padding: 0 8px; border-radius: var(--wobble-2); border: 1.2px solid var(--line-strong); color: var(--ink-2); }
+.agent-config.edit { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.agent-config.edit label { display: grid; gap: 2px; font-size: 12.5px; color: var(--muted); }
+.agent-config.edit input, .agent-config.edit select { min-width: 0; font: 13.5px var(--hand); color: var(--ink); background: transparent; border: 1.3px solid var(--line-strong); border-radius: var(--wobble-2); padding: 3px 6px; }
+.agent-config.edit select option { background: var(--bg); }

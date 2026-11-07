@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { CaseResult, NodeSpec, NodeState, Proof, Session, TestCase } from '../mcp/schema';
+import type { AgentSpec, CaseResult, NodeSpec, NodeState, Proof, Session, TestCase } from '../mcp/schema';
 import { ACCEPT_ID, TASK_ID, activeAttempts, agentColor, aggregateStatus, buildView, taskEnds, counts, isContainer, stateLabel, viewDescendants, type ViewNode } from './canvas-model';
 import { currentWork, nodeActivities } from './collaboration-model';
 import { deletionImpact, nodeSpecification, previewImpact, subtreeIds } from './inspector-model';
@@ -21,6 +21,8 @@ export interface NodeInspectorProps {
   onAskAi: (nodeId: string | null, rework?: boolean) => void;
   /** Ask the host agent to generate normal, boundary and extreme samples for a node. */
   onGenerateCases?: (nodeId: string) => void;
+  /** Saves edited agent settings (a new version that needs approval). */
+  onSaveAgents?: (agents: AgentSpec[]) => Promise<void>;
   /** Loads a stored screenshot or recording as a data: URL. */
   loadArtifact?: (id: string) => Promise<string>;
   onLocate: (nodeId: string) => void;
@@ -241,6 +243,35 @@ function Describe({ node, view, onLocate, fallback }: { node: NodeState; view: M
 }
 const Outcome = ({ node }: { node: NodeState }) => node.result ? <Section><div className={`callout ${node.status === 'failed' ? 'fail' : node.status === 'passed' ? 'pass' : ''}`}><p>{node.result}</p></div></Section> : null;
 
+const effortNames = { low: '低', medium: '中', high: '高', xhigh: '很高' } as const;
+const modeNames = { readonly: '只读', ask: '改动前先问', auto: '自动执行' } as const;
+/** Who does what, and with which model, effort and mode; set by the planning agent from how hard the work is, editable here. */
+function Agents({ session, busy, onSave }: { session: Session; busy: boolean; onSave?: (agents: AgentSpec[]) => Promise<void> }) {
+  const [draft, setDraft] = useState<AgentSpec[] | null>(null);
+  const [error, setError] = useState('');
+  const set = (id: string, patch: Partial<AgentSpec>) => setDraft(d => d!.map(a => a.id === id ? { ...a, ...patch } : a));
+  const save = async () => {
+    setError('');
+    try { await onSave!(draft!.map(a => ({ ...a, model: a.model?.trim() || undefined }))); setDraft(null); }
+    catch (failure) { setError(failure instanceof Error ? failure.message : '保存失败'); }
+  };
+  return <details className="fold agents-fold" open={Boolean(draft) || undefined}><summary>Agent 分工（{session.agents.length}）</summary>
+    <ul className="agents">{(draft ?? session.agents).map(a => <li key={a.id} data-agent-id={a.id}><Avatar session={session} agentId={a.id} /><div>
+      <strong>{a.name}</strong> · {a.role}
+      {draft ? <div className="agent-config edit">
+        <label>模型<input value={a.model ?? ''} placeholder="沿用默认" maxLength={100} onChange={e => set(a.id, { model: e.target.value })} /></label>
+        <label>思考力度<select value={a.effort ?? ''} onChange={e => set(a.id, { effort: (e.target.value || undefined) as AgentSpec['effort'] })}><option value="">默认</option>{Object.entries(effortNames).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
+        <label>方式<select value={a.mode ?? ''} onChange={e => set(a.id, { mode: (e.target.value || undefined) as AgentSpec['mode'] })}><option value="">默认</option>{Object.entries(modeNames).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
+      </div> : <p className="agent-config">{[a.model ?? '默认模型', a.effort ? `思考${effortNames[a.effort]}` : '默认力度', a.mode ? modeNames[a.mode] : '默认方式'].map((t, i) => <span key={i} className="chip-flat">{t}</span>)}</p>}
+      {a.reason && <p className="note">{a.reason}</p>}
+      <p>负责：{a.scope}</p><p>上限：{a.budget}</p></div></li>)}</ul>
+    {onSave && (draft
+      ? <><p className="note">保存后生成新版本，需要重新批准。</p>{error && <p role="alert" className="callout fail">{error}</p>}
+          <div className="row"><button type="button" className="btn" disabled={busy} onClick={() => setDraft(null)}>取消</button><button type="button" className="btn primary" disabled={busy} onClick={() => void save()}>保存为 v{session.revision + 1}</button></div></>
+      : <div className="row"><button type="button" className="btn" disabled={busy} onClick={() => setDraft(session.agents.map(a => ({ ...a })))}>调整模型与方式</button></div>)}
+  </details>;
+}
+
 /** The whole task, opened from the title: where it starts, what it delivers, the stages between, and every test. */
 function WholeTask(props: NodeInspectorProps & { view: Map<string, ViewNode> }) {
   const { session, view, onLocate } = props;
@@ -258,7 +289,7 @@ function WholeTask(props: NodeInspectorProps & { view: Map<string, ViewNode> }) 
             <li className="end"><span>输出 · 用户验收</span></li>
           </ol>
           {!!session.clarifications?.length && <details className="fold"><summary>已确认的要求（{session.clarifications.length}）</summary><dl className="qa">{session.clarifications.map((item, index) => <div key={index}><dt>{item.question}</dt><dd>{item.answer}</dd></div>)}</dl></details>}
-          <details className="fold"><summary>Agent 分工（{session.agents.length}）</summary><ul className="agents">{session.agents.map(a => <li key={a.id}><Avatar session={session} agentId={a.id} /><div><strong>{a.name}</strong> · {a.role}<p>负责：{a.scope}</p><p>上限：{a.budget}</p></div></li>)}</ul></details></>}
+          <Agents session={session} busy={props.busy} onSave={props.onSaveAgents} /></>}
         input={<>{ends.input ? <p>{ends.input}</p> : <Unfilled />}
           {!!session.context.length && <details className="fold"><summary>依据的资料（{session.context.length}）</summary><ul>{session.context.map((item, i) => <li key={i}>{item}</li>)}</ul></details>}</>}
         output={<><p>{ends.output}</p><p className="note">最后交给你验收</p></>}
@@ -350,10 +381,10 @@ function DeletionConfirmation({ node, session, busy, onDelete, onLocate, onCance
   </section>;
 }
 
-function Shell({ session, view, id, title, status, menu, onClose, busy, children, foot }: {
-  session: Session; view: Map<string, ViewNode>; id: string; title: string; status: ReactNode; menu?: ReactNode; onClose: () => void; busy: boolean; children: ReactNode; foot?: ReactNode;
+function Shell({ session, view, id, title, status, menu, onClose, busy, children, foot, label = '节点详情' }: {
+  session: Session; view: Map<string, ViewNode>; id: string; title: string; status: ReactNode; menu?: ReactNode; onClose: () => void; busy: boolean; children: ReactNode; foot?: ReactNode; label?: string;
 }) {
-  return <aside className="node-inspector" aria-label="节点详情" data-inspector-node={id}
+  return <aside className="node-inspector" aria-label={label} data-inspector-node={id}
     onKeyDown={event => { if (event.key === 'Escape' && !busy) { event.stopPropagation(); onClose(); } }}>
     <div className="panel-head"><Glyph session={session} view={view} id={id} size={19} /><h2>{title}</h2>{menu}
       <button type="button" className="icon-btn" onClick={onClose} disabled={busy} aria-label="关闭节点详情"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg></button></div>
@@ -381,7 +412,7 @@ export function NodeInspector(props: NodeInspectorProps) {
   if (nodeId === TASK_ID) {
     const root = session.nodes.find(n => n.parentId === null);
     if (!root) return null;
-    return <Shell session={session} view={view} id={root.id} title={session.title} status={status(root.id)} onClose={onClose} busy={busy}>
+    return <Shell session={session} view={view} id={root.id} title={session.title} status={status(root.id)} onClose={onClose} busy={busy} label="整体任务详情">
       <div data-inspector-mode="task"><WholeTask {...props} view={view} /></div>
     </Shell>;
   }

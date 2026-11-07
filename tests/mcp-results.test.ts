@@ -117,4 +117,16 @@ describe('以效果为中心的计划', () => {
     expect(coarseStages(model.nodes)).toEqual([]);
     expect(coarseStages(plan().nodes as NodeSpec[])).toEqual(['「中文直接打开不乱码」（r-zh）只有 1 个步骤']);
   });
+
+  it('每个 Agent 按难度配模型、思考力度和方式，写进文字树；用户修改后生成新版本', () => {
+    const tuned = [{ ...agents[0], effort: 'high' as const, mode: 'readonly' as const }, { ...agents[1], model: 'claude-opus-5-5', effort: 'xhigh' as const, mode: 'ask' as const, reason: '排错最难' }];
+    const service = new ArborunService(), id = service.propose({ ...plan(), agents: tuned }).id;
+    expect(service.renderTree(id)).toContain('配置：模型 claude-opus-5-5｜思考力度 很高（xhigh）｜方式 改动前先问（ask）｜理由：排错最难');
+    expect(() => service.propose({ ...plan(), agents: [{ ...agents[0], effort: 'max' as never }, agents[1]] })).toThrow();
+    service.userAction({ type: 'approve', sessionId: id, expectedRevision: 1 });
+    const edited = service.userAction({ type: 'edit', sessionId: id, expectedRevision: 1, nodes: plan().nodes as NodeSpec[], agents: [tuned[0], { ...tuned[1], effort: 'medium' }] });
+    expect(edited.revision).toBe(2);
+    expect(edited.status).toBe('draft');
+    expect(edited.agents[1].effort).toBe('medium');
+  });
 });

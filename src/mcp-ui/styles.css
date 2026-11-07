@@ -54,7 +54,18 @@ h1, h2, h3, h4, p { margin: 0; }
 .continuation summary { cursor: pointer; color: var(--muted); }
 .continuation textarea { width: 100%; margin-top: 8px; font: 13px var(--mono); color: var(--ink); background: transparent; border: 1.4px solid var(--line-strong); border-radius: var(--wobble-2); padding: 8px; }
 
-/* Side panels dock to the right; the canvas narrows instead of being covered. */
+/* A clicked node's panel docks beside the canvas; a hovered node's preview slides over it, so hovering never reflows the tree. */
+.pinned-panel { min-height: 0; height: 100%; }
+.hover-panel { position: absolute; top: 56px; right: 0; bottom: 0; z-index: 32; box-shadow: -18px 0 40px rgba(0, 0, 0, .55); animation: slide-in .16s ease-out; }
+.hover-panel.left { right: auto; left: 0; box-shadow: 18px 0 40px rgba(0, 0, 0, .55); animation-name: slide-in-left; }
+@keyframes slide-in-left { from { transform: translateX(-24px); opacity: 0; } }
+.pinned-panel > .node-inspector, .hover-panel > .node-inspector { height: 100%; }
+@keyframes slide-in { from { transform: translateX(24px); opacity: 0; } }
+/* The whole task drops down from the title. */
+.task-sheet { position: absolute; top: 56px; left: 0; right: 0; max-height: min(78%, 760px); z-index: 34; display: flex; background: var(--bg); border-bottom: 1.4px solid var(--line-strong); box-shadow: 0 24px 50px rgba(0, 0, 0, .65); animation: drop-down .18s ease-out; }
+.task-sheet > .node-inspector { width: 100%; max-width: 860px; margin: 0 auto; height: auto; max-height: 100%; }
+.task-sheet > .node-inspector::before { display: none; }
+@keyframes drop-down { from { transform: translateY(-14px); opacity: 0; } }
 .node-inspector, .side-panel { width: 380px; height: 100%; display: flex; flex-direction: column; min-height: 0; background: var(--bg); position: relative; }
 .node-inspector::before, .side-panel::before { content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 6px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 6 400' preserveAspectRatio='none'%3E%3Cpath d='M3.2 1C2.2 70 4.3 140 3 210S2.5 330 3.5 399' fill='none' stroke='%233a372f' stroke-width='1.4'/%3E%3C/svg%3E") center / 100% 100% no-repeat; }
 .side-panel { padding: 0 18px 18px 22px; overflow: auto; }
@@ -74,5 +85,6 @@ h1, h2, h3, h4, p { margin: 0; }
 @media (max-width: 760px) {
   .workspace-area { grid-template-columns: minmax(0, 1fr); }
   .node-inspector, .side-panel { position: absolute; inset: 0 0 0 auto; width: 100%; z-index: 30; }
+  .hover-panel { display: none; }
 }
-@media (prefers-reduced-motion: reduce) { .btn:hover { transform: none; } }
+@media (prefers-reduced-motion: reduce) { .btn:hover { transform: none; } .hover-panel, .task-sheet { animation: none; } }

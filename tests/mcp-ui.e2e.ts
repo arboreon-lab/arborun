@@ -82,6 +82,7 @@ const nodeCard = (page: Page, id: string) => page.locator(`[data-node-id="${id}"
 const shell = (page: Page) => page.locator('.arborun-canvas-shell');
 const nodeButton = (page: Page, title: string) => page.locator(`.node[aria-label^="${title}，"]`);
 const inspector = (page: Page) => page.getByRole('complementary', { name: '节点详情' });
+const taskPanel = (page: Page) => page.getByRole('complementary', { name: '整体任务详情' });
 async function dismissNotice(page: Page) {
   const notice = page.locator('.message[role="status"]');
   if (await notice.count()) await notice.click();
@@ -114,18 +115,18 @@ async function editReadNode(page: Page, text: string) {
 }
 async function rootDetails(page: Page) {
   await closeInspector(page);
-  // The whole task opens from the title at the top left, from any level.
-  await page.locator('[data-task-title]').click();
+  // The whole task drops down from the icon beside the title, from any level.
+  if (await page.locator('[data-task-toggle]').getAttribute('aria-expanded') !== 'true') await page.locator('[data-task-toggle]').click();
   await expect(shell(page)).toHaveAttribute('data-scope', 'root');
-  await expect(inspector(page)).toBeVisible();
-  await expect(inspector(page).locator('[data-inspector-mode="task"]')).toBeVisible();
+  await expect(taskPanel(page)).toBeVisible();
 }
 async function approve(page: Page, revision: number) {
   await rootDetails(page);
-  await inspector(page).getByRole('button', { name: `批准 v${revision} 并执行`, exact: true }).click();
-  await expect(inspector(page).getByRole('button', { name: '暂停执行', exact: true })).toBeVisible();
+  await taskPanel(page).getByRole('button', { name: `批准 v${revision} 并执行`, exact: true }).click();
+  await expect(taskPanel(page).getByRole('button', { name: '暂停执行', exact: true })).toBeVisible();
   await dismissNotice(page);
-  await closeInspector(page);
+  await page.locator('[data-task-toggle]').click();
+  await expect(taskPanel(page)).toHaveCount(0);
 }
 
 test.beforeEach(async () => {
@@ -226,8 +227,8 @@ test('节点菜单编辑、根详情批准、真实 MCP 状态原位更新并在
   const reviewer = await claimNode('review');
   const parallel = await claimNode('parallel');
   await page.locator('[data-breadcrumb="root"]').click();
-  // The working agent shows as a pulsing tip on its own arc of the folded node's ring, not as an avatar.
-  await expect(nodeCard(page, 'investigation').locator('.ring-tip')).toHaveCount(1);
+  // The working agent's arc of the folded node's ring breathes; no avatar is shown.
+  await expect(nodeCard(page, 'investigation').locator('.ring-arc.live')).toHaveCount(1);
   await expect(nodeCard(page, 'investigation').locator('.avatar')).toHaveCount(0);
   await expect(nodeCard(page, 'parallel')).toHaveAttribute('data-running', 'true');
   await nodeButton(page, '兼容性调查').dblclick();
@@ -246,16 +247,16 @@ test('节点菜单编辑、根详情批准、真实 MCP 状态原位更新并在
   await passNode('deliver');
   expect((await tool('arborun_submit', { sessionId, revision: 2 })).isError).not.toBe(true);
   await rootDetails(page);
-  await expect(inspector(page).getByRole('button', { name: '验收通过', exact: true })).toBeVisible();
+  await expect(taskPanel(page).getByRole('button', { name: '验收通过', exact: true })).toBeVisible();
   const beforeAccept = await geometry(page);
   const beforeIds = (await current()).nodes.map(node => node.id);
-  await inspector(page).getByRole('button', { name: '验收通过', exact: true }).click();
-  await expect(inspector(page)).toContainText('用户已验收');
+  await taskPanel(page).getByRole('button', { name: '验收通过', exact: true }).click();
+  await expect(taskPanel(page)).toContainText('用户已验收');
   const accepted = await current();
   expect(accepted.status).toBe('accepted');
   expect(accepted.nodes.map(node => node.id)).toEqual(beforeIds);
   // Acceptance happens in the whole-task view, which stays open; the tree does not move.
-  await expect(inspector(page).locator('[data-inspector-mode="task"]')).toBeVisible();
+  await expect(taskPanel(page)).toBeVisible();
   expect(await geometry(page)).toEqual(beforeAccept);
   await page.screenshot({ path: info.outputPath('reference-accepted-expanded.png'), fullPage: true });
 });
@@ -305,18 +306,31 @@ test('长任务：节点完成后，测试里每个样例显示实际结果与�
   expect(created.isError).not.toBe(true);
   sessionId = (created.structuredContent as unknown as { session: Session }).session.id;
   await openTree(page);
-  // The start node is only where the path begins.
-  await nodeButton(page, '起点').click();
-  await expect(inspector(page)).toContainText('任务从这里出发');
-  await expect(inspector(page).getByRole('button', { name: '批准 v1 并执行', exact: true })).toHaveCount(0);
-  await page.locator('[data-task-title]').click();
-  await expect(inspector(page)).toContainText('最后交给你验收');
-  await inspector(page).getByRole('button', { name: '批准 v1 并执行', exact: true }).click();
-  await expect(inspector(page).getByRole('button', { name: '暂停执行', exact: true })).toBeVisible();
-  // Root reads as the same four parts as every node.
-  for (const part of ['输入', '输出', '描述', '测试']) await expect(inspector(page).getByRole('heading', { name: part, exact: true })).toBeVisible();
+  // There is no start node: the path begins at the first stage; the whole task drops down from the title icon.
+  await expect(nodeCard(page, 'root')).toHaveCount(0);
+  await page.locator('[data-task-toggle]').click();
+  await expect(taskPanel(page)).toContainText('最后交给你验收');
+  for (const part of ['输入', '输出', '描述', '测试']) await expect(taskPanel(page).getByRole('heading', { name: part, exact: true })).toBeVisible();
+  // Each agent's model, effort and mode are set by how hard its work is, and the user can change them.
+  await taskPanel(page).getByText('Agent 分工').click();
+  await expect(taskPanel(page).locator('[data-agent-id="train"] .agent-config')).toContainText('claude-opus-5-5');
+  await expect(taskPanel(page).locator('[data-agent-id="data"] .agent-config')).toContainText('思考低');
+  await page.screenshot({ path: test.info().outputPath('reference-task-sheet.png') });
+  await taskPanel(page).getByRole('button', { name: '调整模型与方式', exact: true }).click();
+  await taskPanel(page).locator('[data-agent-id="data"]').getByLabel('思考力度').selectOption('medium');
+  await taskPanel(page).getByRole('button', { name: '保存为 v2', exact: true }).click();
+  await expect.poll(async () => (await current()).agents.find(a => a.id === 'data')?.effort).toBe('medium');
+  expect((await current()).revision).toBe(2);
+  await taskPanel(page).getByRole('button', { name: '批准 v2 并执行', exact: true }).click();
+  await expect(taskPanel(page).getByRole('button', { name: '暂停执行', exact: true })).toBeVisible();
   await dismissNotice(page);
-  await closeInspector(page);
+  await page.locator('[data-task-toggle]').click();
+  // Hovering a node previews its details; moving away closes the preview.
+  await nodeButton(page, '照片整理干净').hover();
+  await expect(page.locator('.hover-panel')).toContainText('照片整理干净');
+  await page.screenshot({ path: test.info().outputPath('reference-hover.png') });
+  await page.mouse.move(5, 300);
+  await expect(page.locator('.hover-panel')).toHaveCount(0);
 
   const grant = await claimNode('d-scan');
   const report = await tool('arborun_report', {

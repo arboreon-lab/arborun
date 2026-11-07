@@ -23,6 +23,11 @@ export interface TreeCanvasProps {
   panelOpen?: boolean;
   /** Fold the tree into the overview (replaces folding subtrees when provided). */
   onOverview?: () => void;
+  /** The whole task drops down from the title; the icon beside it toggles it. */
+  taskOpen?: boolean;
+  onTaskToggle?: (open?: boolean) => void;
+  /** Hovering a node previews its details; null when the pointer leaves the nodes. */
+  onHover?: (id: string | null) => void;
 }
 
 /** Shorten a line where it meets a node, so arrowheads stop outside the progress ring. */
@@ -36,8 +41,10 @@ const trim = (pts: Point[], atStart: boolean, atEnd: boolean, d = RING_GAP + RIN
 const ICON = {
   tb: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden="true"><path d="M6 3v18M6 7h5M6 15h5M11 7h7M11 15h7M14 15v4h4" /></svg>,
   lr: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden="true"><path d="M3 6h18M7 6v5M15 6v5M7 11v7M15 11v7M15 14h4v4" /></svg>,
-  fold: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m7 4 5 5 5-5M7 20l5-5 5 5" /></svg>,
-  unfold: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m7 9 5-5 5 5M7 15l5 5 5-5" /></svg>,
+  // Arrows pulling into the corner: shrink to the overview. Arrows pushing out: open everything.
+  fold: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7" /></svg>,
+  unfold: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" /></svg>,
+  task: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3" /><path d="M8 9h8M8 13h8M8 17h5" /></svg>,
 };
 const loadOffsets = (): Record<string, Point> => { try { return JSON.parse(localStorage.getItem('arborun-card-offsets') || '{}') || {}; } catch { return {}; } };
 const saveOffsets = (value: Record<string, Point>) => { try { localStorage.setItem('arborun-card-offsets', JSON.stringify(value)); } catch { /* per-viewer convenience only */ } };
@@ -60,7 +67,7 @@ export function Avatar({ session, agentId }: { session: Session; agentId: string
   return <span className="avatar" style={{ '--agent': agentColor(session, agentId) } as React.CSSProperties} title={name}>{name.slice(0, 1)}</span>;
 }
 
-export function TreeCanvas({ session, selectedId, onSelect, onEnter, editing = false, impact, locateRequest, resetRequest, panelOpen, onOverview }: TreeCanvasProps) {
+export function TreeCanvas({ session, selectedId, onSelect, onEnter, editing = false, impact, locateRequest, resetRequest, panelOpen, onOverview, taskOpen = false, onTaskToggle, onHover }: TreeCanvasProps) {
   const view = useMemo(() => buildView(session), [session]);
   const root = session.nodes.find(n => n.parentId === null)?.id ?? '';
   const [scope, setScope] = useState(root);
@@ -105,7 +112,8 @@ export function TreeCanvas({ session, selectedId, onSelect, onEnter, editing = f
   }, [layout, viewportSize]);
   // Far zoom shows titles only; switch after a zoom animation so cards do not flash large titles.
   useEffect(() => {
-    const next = camera.zoom < .5 ? 'far' : 'near';
+    // Zoomed out, a node shows only its name, centred and enlarged so it stays readable.
+    const next = camera.zoom < .8 ? 'far' : 'near';
     if (!animate) { setLod(next); return; }
     const t = setTimeout(() => setLod(next), 340); return () => clearTimeout(t);
   }, [camera.zoom, animate]);
@@ -160,20 +168,6 @@ export function TreeCanvas({ session, selectedId, onSelect, onEnter, editing = f
     needsFit.current = 'start'; setAnimate(true);
   };
   const switchView = () => { if (blocked()) return; setTreeView(v => v === 'tb' ? 'lr' : 'tb'); needsFit.current = 'start'; setAnimate(false); };
-
-  // Running cards redraw their outline every half second: the line "boils", as hand-drawn animation does.
-  useEffect(() => {
-    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    let frame = 0;
-    const timer = setInterval(() => {
-      frame = (frame + 1) % 3;
-      worldRef.current?.querySelectorAll<HTMLElement>('.node[data-live="true"]').forEach(el => {
-        const svg = el.querySelector('.sketch'); const look = el.dataset.look;
-        if (svg && look) svg.innerHTML = cardMarkup(el.dataset.id!, JSON.parse(look) as CardLook, frame);
-      });
-    }, 520);
-    return () => clearInterval(timer);
-  }, []);
 
   // Hovering a node traces the path that leads to it from the start of the trunk.
   const trace = (id: string | null) => {
@@ -375,7 +369,9 @@ export function TreeCanvas({ session, selectedId, onSelect, onEnter, editing = f
       <nav className="crumbs" aria-label="当前子树路径">{path.map((n, i) => <React.Fragment key={n.id}>{i > 0 && <span className="sep" aria-hidden="true">/</span>}
         {i === 0
           // The title is the whole task: it returns to the top level and opens the task's own details.
-          ? <button type="button" data-breadcrumb={n.id} data-task-title aria-current={n.id === scope ? 'page' : undefined} title="查看整个任务" onClick={() => { if (blocked()) return; if (n.id !== scope) enter(n.id, true); onSelect(TASK_ID); }}>{session.title}</button>
+          ? <><button type="button" data-breadcrumb={n.id} data-task-title aria-current={n.id === scope ? 'page' : undefined} onClick={() => { if (blocked()) return; if (n.id !== scope) enter(n.id, true); else onTaskToggle?.(); }}>{session.title}</button>
+            {onTaskToggle && <button type="button" className={`tool task-toggle${taskOpen ? ' open' : ''}`} data-task-toggle aria-expanded={taskOpen} aria-label={taskOpen ? '收起整体任务' : '展开整体任务'} title={taskOpen ? '收起整体任务' : '展开整体任务'}
+              onClick={() => { if (blocked()) return; if (n.id !== scope) enter(n.id, true); onTaskToggle(!taskOpen); }}>{ICON.task}</button>}</>
           : <button type="button" data-breadcrumb={n.id} aria-current={n.id === scope ? 'page' : undefined} onClick={() => n.id === scope ? !blocked() && onSelect(n.id) : enter(n.id, true)}>{n.title}</button>}</React.Fragment>)}</nav>
       <div className="tools">
         {onOverview
@@ -388,9 +384,10 @@ export function TreeCanvas({ session, selectedId, onSelect, onEnter, editing = f
       style={{ backgroundSize: `${grid}px ${grid}px`, backgroundPosition: `${camera.x}px ${camera.y}px` }}
       onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}
       onClick={onClick} onDoubleClick={onDoubleClick} onKeyDown={onKeyDown}
-      onMouseOver={event => trace((event.target as HTMLElement).closest<HTMLElement>('.node')?.dataset.id ?? null)} onMouseLeave={() => trace(null)}>
+      onMouseOver={event => { const id = (event.target as HTMLElement).closest<HTMLElement>('.node')?.dataset.id ?? null; trace(id); if (!gesture.current?.moved) onHover?.(id); }}
+      onMouseLeave={() => { trace(null); onHover?.(null); }}>
       <div ref={worldRef} className={`world${animate ? ' animate' : ''}${dragging ? ' dragging' : ''}`} data-testid="canvas-world" data-lod={lod}
-        style={{ transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.zoom})` }}>
+        style={{ transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.zoom})`, '--inv': 1 / camera.zoom } as React.CSSProperties}>
         {layout.rects.map(r => {
           const v = view.get(r.id)!, s = aggregateStatus(session, view, r.id), c = counts(session, view, r.id);
           const color = s === 'failed' && v.kind !== 'work' ? 'var(--fail)' : v.kind === 'result' ? 'var(--line-strong)' : 'var(--line)';

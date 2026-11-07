@@ -39,9 +39,10 @@ export function cardMarkup(id: string, look: CardLook, frame = 0) {
   const seed = seedOf(id) + frame * 97, D = NODE_D;
   const base = { stroke: look.color, strokeWidth: look.width, roughness: 1.1, bowing: 1, seed, ...(look.dashed ? { strokeLineDash: [6, 6] } : {}) };
   let out = '';
-  if (look.stacked) out += draw(gen.circle(C + 9, C + 7, D, { ...base, stroke: 'var(--faint)', strokeWidth: 1.1, seed: seed + 1 }), gen.circle(C + 5, C + 4, D, { ...base, stroke: 'var(--line-strong)', strokeWidth: 1.1, seed: seed + 2 }));
+  // A folded node shows one faint shadow behind it: there is more inside.
+  if (look.stacked) out += draw(gen.circle(C + 6, C + 5, D, { ...base, stroke: 'var(--line)', strokeWidth: 1.1, disableMultiStroke: true, roughness: .8, seed: seed + 1 }));
   if (look.hatch) out += `<g opacity=".2">${draw(gen.circle(C, C, D - 8, { stroke: 'none', fill: look.color, fillStyle: 'hachure', hachureGap: 10, hachureAngle: -41, fillWeight: .8, roughness: 1.2, seed }))}</g>`;
-  out += draw(gen.circle(C, C, D, base));
+  out += draw(gen.circle(C, C, D, { ...base, disableMultiStroke: true, roughness: .9 }));
   if (look.selected) out += draw(gen.circle(C, C, D - 7, { ...base, strokeWidth: 1, seed: seed + 5, roughness: 1.5 }));
   return out;
 }
@@ -49,24 +50,22 @@ export function cardMarkup(id: string, look: CardLook, frame = 0) {
 /** One agent's arc of the progress ring: its share of the circle, how much of that share is done, and whether it is working now. */
 export interface RingSegment { agentId: string; color: string; share: number; done: number; running: boolean }
 /**
- * Progress drawn as a stroke around the node: each agent owns an arc in its own colour, sized by its share of the work,
- * and inks it clockwise from the top as its steps and tests pass. Work still ahead is a faint dotted trace;
- * an agent working now has a pulsing dot where its ink stops.
+ * Progress as one clean stroke around the node: each agent owns a part of the circle in its own colour and fills it
+ * clockwise from the top as its steps and tests pass. Nothing is drawn for work not yet done; an agent working now
+ * shows a softly breathing arc (a short stub when it has not finished anything yet).
  */
-export function ringMarkup(id: string, segments: RingSegment[]) {
-  const r = NODE_D / 2 + RING_GAP, gap = segments.length > 1 ? .09 : 0, seed = seedOf(`ring:${id}`);
+export function ringMarkup(_id: string, segments: RingSegment[]) {
+  const r = NODE_D / 2 + RING_GAP, gap = segments.length > 1 ? .14 : 0;
+  const point = (a: number) => `${(C + r * Math.cos(a)).toFixed(2)} ${(C + r * Math.sin(a)).toFixed(2)}`;
+  const arc = (from: number, to: number) => to - from >= Math.PI * 2 - .001
+    ? `M ${point(from)} A ${r} ${r} 0 1 1 ${point(from + Math.PI)} A ${r} ${r} 0 1 1 ${point(from)}`
+    : `M ${point(from)} A ${r} ${r} 0 ${to - from > Math.PI ? 1 : 0} 1 ${point(to)}`;
   let a = -Math.PI / 2, out = '';
-  segments.forEach((s, i) => {
-    const span = Math.PI * 2 * s.share - gap, drawn = span * Math.min(1, s.done), sd = seed + i * 13;
-    const arc = (from: number, to: number, x: object) => gen.arc(C, C, r * 2, r * 2, from, to, false, { stroke: s.color, seed: sd, disableMultiStroke: true, ...x });
-    if (span - drawn > .03) out += `<g class="ring-rest" opacity=".55">${draw(arc(a + drawn, a + span, { strokeWidth: 1.3, roughness: .5, strokeLineDash: [2, 7] }))}</g>`;
-    if (drawn > .02) out += `<g class="ring-done" data-agent="${s.agentId}">${draw(arc(a, a + drawn, { strokeWidth: RING_W, roughness: .7, bowing: .6 }))}</g>`;
-    if (s.running) {
-      const t = a + drawn;
-      out += `<circle class="ring-tip" cx="${C + r * Math.cos(t)}" cy="${C + r * Math.sin(t)}" r="4.6" style="fill:${s.color};transform-origin:${C + r * Math.cos(t)}px ${C + r * Math.sin(t)}px" data-agent="${s.agentId}"/>`;
-    }
+  for (const s of segments) {
+    const span = Math.PI * 2 * s.share - gap, drawn = Math.max(span * Math.min(1, s.done), s.running ? Math.min(.22, span) : 0);
+    if (drawn > .01) out += `<path class="ring-arc${s.running ? ' live' : ''}" data-agent="${s.agentId}" d="${arc(a + gap / 2, a + gap / 2 + drawn)}" style="stroke:${s.color};stroke-width:${RING_W}"/>`;
     a += span + gap;
-  });
+  }
   return out;
 }
 export function frameMarkup(id: string, w: number, h: number, color: string, solid: boolean) {
