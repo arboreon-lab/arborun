@@ -45,11 +45,11 @@ const parseCases = (kind: TestCase['kind'], value: string): TestCase[] => splitL
 });
 const isImage = (value: string) => /^data:image\//i.test(value) || /^https?:\/\/\S+\.(png|jpe?g|gif|webp|svg)(\?\S*)?$/i.test(value);
 
-function Field({ label, value, onChange, multiline = false, required = false, maxLength, hint }: {
-  label: string; value: string; onChange: (value: string) => void; multiline?: boolean; required?: boolean; maxLength?: number; hint?: string;
+function Field({ label, value, onChange, multiline = false, required = false, maxLength, hint, hideLabel = false }: {
+  label: string; value: string; onChange: (value: string) => void; multiline?: boolean; required?: boolean; maxLength?: number; hint?: string; hideLabel?: boolean;
 }) {
   const id = useId();
-  return <div className="field"><label htmlFor={id}>{label}</label>{multiline
+  return <div className="field"><label htmlFor={id} className={hideLabel ? 'sr-only' : undefined}>{label}</label>{multiline
     ? <textarea id={id} value={value} onChange={event => onChange(event.target.value)} rows={3} required={required} maxLength={maxLength} placeholder={hint} />
     : <input id={id} value={value} onChange={event => onChange(event.target.value)} required={required} maxLength={maxLength} placeholder={hint} />}</div>;
 }
@@ -93,12 +93,8 @@ function Editor({ node, session, busy, editRevision, onSave, onCancel, adding }:
     catch (failure) { setError(failure instanceof Error ? failure.message : '保存失败，草稿已保留。'); }
   };
 
-  return <form className="editor" onSubmit={event => { event.preventDefault(); void save(); }}>
-    {conflict && <p className="callout wait" role="status">当前树已更新到 v{session.revision}；此草稿基于 v{editRevision}。保存仍校验原版本，冲突时不会覆盖新内容。</p>}
-    {deleted && <p className="callout wait" role="alert">节点已被删除，当前草稿保留供复制。</p>}
-    <section className="callout wait" aria-label="修改影响范围"><p><strong>保存后生成 v{session.revision + 1}，当前批准撤销。</strong></p>
-      <p>{impact.length} 个节点可能需要重新执行；已有记录保留在 v{session.revision}。</p></section>
-    <Field label="标题" value={draft.title} onChange={value => change('title', value)} required maxLength={300} />
+  // The edit page is the detail page with its parts made editable in place.
+  const more = <details className="fold"><summary>更多设置</summary><div className="editor-more">
     <div className="pair">
       <label className="field"><span>类型</span><select value={draft.kind} disabled={isRoot} onChange={event => change('kind', event.target.value as NodeSpec['kind'])}>
         {Object.entries(kindNames).map(([key, name]) => <option key={key} value={key} disabled={hasChildren && !['group', 'result', 'agent'].includes(key)}>{name}</option>)}
@@ -107,24 +103,6 @@ function Editor({ node, session, busy, editRevision, onSave, onCancel, adding }:
         {session.agents.map(agent => <option key={agent.id} value={agent.id}>{agent.name}</option>)}
       </select></label>}
     </div>
-    <h4 className="part">输入</h4>
-    <Field label={isTest ? '用什么数据' : '输入'} value={draft.input} onChange={value => change('input', value)} multiline required={!container} maxLength={12000} hint={container ? '这一部分从什么开始' : undefined} />
-    {!container && <Field label={isTest ? '在哪里测' : '在哪'} value={draft.target} onChange={value => change('target', value)} required maxLength={2000} hint={isTest ? '页面、文件或命令' : undefined} />}
-    <h4 className="part">输出</h4>
-    {draft.kind === 'result' && <Field label="要达到的效果" value={draft.action} onChange={value => change('action', value)} multiline required maxLength={12000} hint="用户能看到什么、在哪里看到" />}
-    {draft.kind !== 'result' && !isTest && <Field label={container ? '这一部分交出什么' : '产出什么'} value={draft.output ?? ''} onChange={value => change('output', value)} multiline maxLength={12000} />}
-    {!container && <Field label={isTest ? '应该看到（每行一项）' : '做到这些才算完成（每行一项）'} value={criteria} onChange={setCriteria} multiline required />}
-    <h4 className="part">描述</h4>
-    <Field label="怎么做" value={draft.mapping ?? ''} onChange={value => change('mapping', value)} multiline maxLength={12000} hint="一两句话：输入怎么变成输出" />
-    {!container && <Field label={isTest ? '测试内容' : '具体动作'} value={draft.action} onChange={value => change('action', value)} multiline required maxLength={12000} hint={isTest ? '当……时，应该看到……' : undefined} />}
-    <Field label="注意（每行一项）" value={constraints} onChange={setConstraints} multiline />
-    {!container && <Field label="没做到时" value={draft.failure} onChange={value => change('failure', value)} multiline required maxLength={12000} />}
-    {!container && <>
-      <h4 className="part">测试</h4>
-      <fieldset className="cases-edit"><legend>测试样例（每行：输入 → 应该得到）</legend>
-        {caseKinds.map(([k, name]) => <Field key={k} label={name} value={cases[k]} onChange={value => setCases(c => ({ ...c, [k]: value }))} multiline />)}
-      </fieldset>
-    </>}
     <label className="field"><span>属于</span><select value={draft.parentId || ''} disabled={isRoot} onChange={event => change('parentId', event.target.value || null)}>
       {isRoot && <option value="">无（根节点）</option>}{session.nodes.filter(item => !descendants.has(item.id) && ['group', 'result', 'agent'].includes(item.kind)).map(item => <option key={item.id} value={item.id}>{item.title}</option>)}
     </select></label>
@@ -139,6 +117,32 @@ function Editor({ node, session, busy, editRevision, onSave, onCancel, adding }:
       </select></label>
       {draft.when && <label className="field"><span>何时执行</span><select value={String(draft.when.outcome)} onChange={event => change('when', { ...draft.when!, outcome: event.target.value === 'true' })}><option value="true">条件成立</option><option value="false">条件不成立</option></select></label>}
     </div>}
+  </div></details>;
+  return <form className="editor in-place" onSubmit={event => { event.preventDefault(); void save(); }}>
+    {conflict && <p className="callout wait" role="status">当前树已更新到 v{session.revision}；此草稿基于 v{editRevision}。保存仍校验原版本，冲突时不会覆盖新内容。</p>}
+    {deleted && <p className="callout wait" role="alert">节点已被删除，当前草稿保留供复制。</p>}
+    <input className="title-edit" aria-label="标题" value={draft.title} onChange={event => change('title', event.target.value)} required maxLength={300} placeholder="标题" />
+    <Parts
+      describe={<div className="edit-stack">
+        <Field label="怎么做" value={draft.mapping ?? ''} onChange={value => change('mapping', value)} multiline maxLength={12000} hint="一两句话：输入怎么变成输出" />
+        {!container && <Field label={isTest ? '测试内容' : '具体动作'} value={draft.action} onChange={value => change('action', value)} multiline required maxLength={12000} hint={isTest ? '当……时，应该看到……' : undefined} />}
+        <Field label="注意（每行一项）" value={constraints} onChange={setConstraints} multiline />
+        {!container && <Field label="没做到时" value={draft.failure} onChange={value => change('failure', value)} multiline required maxLength={12000} />}
+        {more}
+      </div>}
+      input={<div className="edit-stack">
+        <Field label={isTest ? '用什么数据' : '输入'} hideLabel={!isTest} value={draft.input} onChange={value => change('input', value)} multiline required={!container} maxLength={12000} />
+        {!container && <Field label={isTest ? '在哪里测' : '在哪'} value={draft.target} onChange={value => change('target', value)} required maxLength={2000} hint={isTest ? '页面、文件或命令' : undefined} />}
+      </div>}
+      output={<div className="edit-stack">
+        {draft.kind === 'result' && <Field label="要达到的效果" value={draft.action} onChange={value => change('action', value)} multiline required maxLength={12000} />}
+        {draft.kind !== 'result' && !isTest && <Field label="产出什么" value={draft.output ?? ''} onChange={value => change('output', value)} multiline maxLength={12000} />}
+        {!container && <Field label={isTest ? '应该看到（每行一项）' : '做到这些才算完成（每行一项）'} value={criteria} onChange={setCriteria} multiline required />}
+      </div>}
+      tests={container ? <ul className="plain">{session.nodes.filter(n => n.kind === 'test' && subtreeIds(session.nodes, draft.id).has(n.id)).map(n => <li key={n.id}>{n.title}</li>)}</ul> : <div className="edit-stack">
+        {caseKinds.map(([k, name]) => <Field key={k} label={name} value={cases[k]} onChange={value => setCases(c => ({ ...c, [k]: value }))} multiline hint="每行：输入 → 应该得到" />)}
+      </div>} />
+    <section className="callout wait impact" aria-label="修改影响范围"><p>保存后生成 v{session.revision + 1}，当前批准撤销；{impact.length} 个节点可能需要重新执行。</p></section>
     {error && <p role="alert" className="callout fail">{error}</p>}
     <div className="panel-foot"><button type="button" className="btn" disabled={busy} onClick={onCancel}>取消</button><button type="submit" className="btn primary" disabled={busy || deleted}>保存为 v{session.revision + 1}</button></div>
   </form>;
@@ -263,7 +267,8 @@ function ModelPicker({ value, known, onChange }: { value?: string; known: string
  * Who does what, and with which model, effort and mode. The planning agent sets them by how hard the work is; the person
  * changes them here (all agents in the task sheet, or the agents behind one node on its page). Saving makes a new version.
  */
-function Agents({ session, busy, onSave, ids, title = 'Agent 分工与模型' }: { session: Session; busy: boolean; onSave?: (agents: AgentSpec[]) => Promise<void>; ids?: string[]; title?: string }) {
+function Agents({ session, busy, onSave, ids, title = 'Agent 分工与模型', view, onLocate }: { session: Session; busy: boolean; onSave?: (agents: AgentSpec[]) => Promise<void>; ids?: string[]; title?: string; view?: Map<string, ViewNode>; onLocate?: (id: string) => void }) {
+  const work = currentWork(session);
   const [draft, setDraft] = useState<AgentSpec[] | null>(null);
   const [error, setError] = useState('');
   const shown = (draft ?? session.agents).filter(a => !ids || ids.includes(a.id));
@@ -275,19 +280,36 @@ function Agents({ session, busy, onSave, ids, title = 'Agent 分工与模型' }:
     try { await onSave!(draft!.map(a => ({ ...a, model: a.model?.trim() || undefined }))); setDraft(null); }
     catch (failure) { setError(failure instanceof Error ? failure.message : '保存失败'); }
   };
-  return <section className="panel-section agents-section" aria-label={title}><h3>{title}</h3>
+  return <section className="panel-section agents-section" aria-label={title}>{title && <h3>{title}</h3>}
     <ul className="agents">{shown.map(a => <li key={a.id} data-agent-id={a.id}><Avatar session={session} agentId={a.id} /><div>
       <strong>{a.name}</strong> · {a.role}
       {draft ? <div className="agent-config edit">
         <ModelPicker value={a.model} known={models} onChange={model => set(a.id, { model })} />
         <label>思考力度<select value={a.effort ?? ''} onChange={e => set(a.id, { effort: (e.target.value || undefined) as AgentSpec['effort'] })}><option value="">默认</option>{Object.entries(effortNames).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
       </div> : <p className="agent-config">{[a.model ?? '默认模型', a.effort ? `思考${effortNames[a.effort]}` : '默认力度'].map((t, i) => <span key={i} className="chip-flat">{t}</span>)}</p>}
-      {!ids && <><p>负责：{a.scope}</p><p>上限：{a.budget}</p></>}</div></li>)}</ul>
+      {!ids && <><p>负责：{a.scope}</p><p>上限：{a.budget}</p></>}
+      {(() => { const doing = work.find(w => w.attempt.agentId === a.id); const act = doing && [...(session.activities ?? [])].reverse().find(x => x.attemptId === doing.attempt.id && x.kind === 'action');
+        return doing ? <p className="agent-doing" style={{ '--agent': agentColor(session, a.id) } as React.CSSProperties}>{act?.summary ?? '已领取'} · {session.nodes.find(n => n.id === doing.attempt.nodeId)?.title}</p> : null; })()}
+      {view && onLocate && (() => { const steps = session.nodes.filter(n => !isContainer(n) && n.parentId !== null && n.agentId === a.id).map(n => n.id);
+        return steps.length ? <details className="fold"><summary>负责的步骤（{steps.length}）</summary><Links session={session} view={view} ids={steps} onLocate={onLocate} /></details> : null; })()}
+      </div></li>)}</ul>
     {onSave && (draft
       ? <>{error && <p role="alert" className="callout fail">{error}</p>}
           <div className="row"><button type="button" className="btn" disabled={busy} onClick={() => setDraft(null)}>取消</button><button type="button" className="btn primary" disabled={busy} onClick={() => void save()}>保存为 v{session.revision + 1}</button></div></>
       : <div className="row"><button type="button" className="btn" disabled={busy} onClick={() => setDraft(session.agents.map(a => ({ ...a })))}>调整模型与力度</button></div>)}
   </section>;
+}
+
+/** The one place to see and set every agent: what it does, its model and effort, what it is doing now and its steps. */
+export function AgentsPanel({ session, busy, onSave, onLocate, onClose }: { session: Session; busy: boolean; onSave?: (agents: AgentSpec[]) => Promise<void>; onLocate: (id: string) => void; onClose: () => void }) {
+  const view = useMemo(() => buildView(session), [session]);
+  const working = new Set(currentWork(session).map(w => w.attempt.agentId)).size;
+  return <aside className="node-inspector" aria-label="Agent 详情" onKeyDown={event => { if (event.key === 'Escape' && !busy) { event.stopPropagation(); onClose(); } }}>
+    <div className="panel-head"><h2>Agent</h2>
+      <button type="button" className="icon-btn" onClick={onClose} disabled={busy} aria-label="关闭 Agent"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg></button></div>
+    <div className="panel-status">{session.agents.length} 个{working ? ` · ${working} 个正在工作` : ''}</div>
+    <div className="panel-scroll"><Agents session={session} busy={busy} onSave={onSave} title="" view={view} onLocate={onLocate} /></div>
+  </aside>;
 }
 
 /** The whole task, opened from the title: where it starts, what it delivers, the stages between, and every test. */
@@ -311,7 +333,6 @@ function WholeTask(props: NodeInspectorProps & { view: Map<string, ViewNode> }) 
         output={<><p>{ends.output}</p></>}
         tests={results.length ? results.map(r => <div key={r.id} className="accept-item"><h4><button type="button" className="link-plain" onClick={() => onLocate(r.id)}><Glyph session={session} view={view} id={r.id} size={14} />{r.title}</button></h4>
           <TestRows session={session} view={view} ids={testsUnder(r.id)} onLocate={onLocate} /></div>) : <TestRows session={session} view={view} ids={testsUnder(node.id)} onLocate={onLocate} />} />
-    <Agents session={session} busy={props.busy} onSave={props.onSaveAgents} />
     </>;
   }
 
@@ -369,7 +390,6 @@ function Details(props: NodeInspectorProps & { node: NodeState; view: Map<string
   if (isContainer(node)) {
     const result = node.kind === 'result', tests = result ? kids.filter(id => view.get(id)?.node?.kind === 'test') : testsUnder(node.id);
     const workId = kids.find(id => view.get(id)?.kind === 'work');
-    const doers = [...new Set(session.nodes.filter(n => !isContainer(n) && viewDescendants(view, node.id).includes(n.id)).map(n => n.agentId))];
     return <><Parts
       describe={<><Describe node={node} view={view} onLocate={onLocate} fallback={!result && node.output ? node.action : undefined} />
         {!result && <><Links session={session} view={view} ids={kids} onLocate={onLocate} /></>}
@@ -379,7 +399,7 @@ function Details(props: NodeInspectorProps & { node: NodeState; view: Map<string
       tests={<>{tests.length ? <TestRows session={session} view={view} ids={tests} onLocate={onLocate} /> : <Unfilled />}
         {!!node.cases?.length && samples}
         <NodeCheck node={node} session={session} view={view} busy={props.busy} onRollback={props.onRollback} /></>} />
-      <Agents session={session} busy={props.busy} onSave={props.onSaveAgents} ids={doers} title="执行的 Agent" /></>;
+      </>;
   }
   const isTest = node.kind === 'test';
   const result = isTest && view.get(node.parentId!)?.kind === 'result' ? node.parentId! : undefined;
@@ -397,7 +417,6 @@ function Details(props: NodeInspectorProps & { node: NodeState; view: Map<string
       tests={<>{samples}<OtherEvidence node={node} session={session} />
 
         <NodeCheck node={node} session={session} view={view} busy={props.busy} onRollback={props.onRollback} /></>} />
-    <Agents session={session} busy={props.busy} onSave={props.onSaveAgents} ids={[node.agentId]} title="执行的 Agent" />
     {fixing && <Section title="处理"><p>Agent 正在自动修复，你不用处理：</p><Live session={session} nodeId={fixing.nodeId} /><Links session={session} view={view} ids={[fixing.nodeId]} onLocate={onLocate} /></Section>}
     {result && <Section title="所属效果"><Links session={session} view={view} ids={[result]} onLocate={onLocate} /></Section>}
     <Messages session={session} nodeId={node.id} />
@@ -427,7 +446,7 @@ function Shell({ session, view, id, title, status, menu, onClose, busy, children
 }) {
   return <aside className="node-inspector" aria-label={label} data-inspector-node={id}
     onKeyDown={event => { if (event.key === 'Escape' && !busy) { event.stopPropagation(); onClose(); } }}>
-    <div className="panel-head"><Glyph session={session} view={view} id={id} size={19} /><h2>{title}</h2>{menu}
+    <div className="panel-head"><Glyph session={session} view={view} id={id} size={19} />{title ? <h2>{title}</h2> : <span className="panel-head-fill" />}{menu}
       <button type="button" className="icon-btn" onClick={onClose} disabled={busy} aria-label="关闭节点详情"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg></button></div>
     <div className="panel-status">{status}</div>
     <div className="panel-scroll">{children}</div>
@@ -480,7 +499,7 @@ export function NodeInspector(props: NodeInspectorProps) {
   const current = session.nodes.find(node => node.id === nodeId);
   const node = current || original;
   if (!node) return null;
-  const title = mode === 'add' ? `添加到「${node.title}」` : mode === 'edit' ? `编辑「${node.title}」` : node.parentId === null ? '起点' : node.title;
+  const title = mode === 'add' ? `添加到「${node.title}」` : node.parentId === null ? '起点' : node.title;
   // The start node carries no task-wide numbers; those belong to the whole-task view under the title.
   const nodeStatus = mode === 'detail' && current && node.parentId !== null ? <>{status(nodeId)}{node.kind === 'test' && <span className={`by ${node.by ?? 'agent'}`}>{node.by === 'user' ? '你设定' : 'Agent 补充'}</span>}</> : null;
   const menu = mode === 'detail' && current ? <div className="menu-wrap"><button type="button" className="icon-btn" aria-label="节点操作" aria-expanded={menuOpen} aria-haspopup="menu" disabled={busy} onClick={() => setMenuOpen(!menuOpen)}>
@@ -498,7 +517,8 @@ export function NodeInspector(props: NodeInspectorProps) {
       ? <button type="button" className="btn" disabled={busy} onClick={props.onEdit}>编辑测试</button>
       : <button type="button" className="btn" disabled={busy} onClick={() => { void props.onSave({ ...nodeSpecification(current), by: 'user' }); }}>设为验收标准</button>)
     : node.parentId === null ? undefined : <button type="button" className="btn" disabled={busy} onClick={props.onEdit}>编辑</button>;
-  return <ArtifactLoader.Provider value={props.loadArtifact}><Shell session={session} view={view} id={nodeId} title={title} status={nodeStatus} menu={menu} onClose={onClose} busy={busy} foot={foot}>
+  // While editing, the editable title takes the heading's place.
+  return <ArtifactLoader.Provider value={props.loadArtifact}><Shell session={session} view={view} id={nodeId} title={mode === 'edit' ? '' : title} status={nodeStatus} menu={menu} onClose={onClose} busy={busy} foot={foot}>
     <div ref={contentRef} data-inspector-mode={mode}>
       {mode === 'detail' ? current ? <>
         {confirmDelete && <DeletionConfirmation node={current} {...props} onCancel={() => setConfirmDelete(false)} />}

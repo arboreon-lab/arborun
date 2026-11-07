@@ -4,7 +4,7 @@ import type { AgentSpec, NodeSpec, NodeState, Session, UserActionInput } from '.
 import { TreeBridge, type ViewData } from './bridge';
 import { TreeCanvas } from './TreeCanvas';
 import { ACCEPT_ID, TASK_ID } from './canvas-model';
-import { NodeInspector } from './NodeInspector';
+import { AgentsPanel, NodeInspector } from './NodeInspector';
 import { Overview } from './Overview';
 import { nodeSpecification, previewImpact } from './inspector-model';
 import './styles.css';
@@ -52,6 +52,7 @@ function Arborun() {
   const [showRecords, setShowRecords] = useState(false);
   // The whole task drops down under the title; hovering a node previews its details on the right.
   const [taskOpen, setTaskOpen] = useState(false);
+  const [agentsOpen, setAgentsOpen] = useState(false);
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [hoverPlace, setHoverPlace] = useState<SheetPlace>({ top: false, height: 320 });
   const hoverTimer = useRef<number | undefined>(undefined);
@@ -151,7 +152,7 @@ function Arborun() {
   // is display-only (the pointer passes through it to the tree); clicking a node pins its details. Drafts are never replaced.
   const hover = (id: string | null) => {
     window.clearTimeout(hoverTimer.current);
-    if (inspector?.mode === 'edit' || inspector?.mode === 'add' || request || taskOpen) return;
+    if (inspector?.mode === 'edit' || inspector?.mode === 'add' || request || taskOpen || agentsOpen) return;
     hoverTimer.current = window.setTimeout(() => {
       if (!id && overPanel.current) return;
       // Hovering the node whose details are already pinned shows nothing extra.
@@ -160,6 +161,12 @@ function Arborun() {
       setHoverId(id);
     }, id ? 140 : 260);
   };
+  // Esc folds the task and agent panels away.
+  useEffect(() => {
+    if (!taskOpen && !agentsOpen) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape' && !inspector) { setTaskOpen(false); setAgentsOpen(false); } };
+    window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey);
+  }, [taskOpen, agentsOpen, inspector]);
   // Esc leaves the full-screen node page (drafts stay until saved or cancelled).
   useEffect(() => {
     if (inspector?.mode !== 'detail') return;
@@ -170,7 +177,7 @@ function Arborun() {
     // Canvas navigation must not move selection away from an open draft.
     if (inspector?.mode === 'edit' || inspector?.mode === 'add' || request) return;
     setSelectedId(id);
-    if (id) setTaskOpen(false);
+    if (id) { setTaskOpen(false); setAgentsOpen(false); }
     setInspector(id && session ? { id, mode: 'detail', revision: session.revision } : undefined);
   };
   const saveNode = (node: NodeSpec) => perform(async () => {
@@ -264,7 +271,8 @@ function Arborun() {
     {session && overview ? <div ref={overviewRef}><Overview session={session} onExpand={expand} taskActions={taskActions} /></div>
     : !session ? <section className="empty"><h1>{connected ? '等待决策执行树' : '连接执行树'}</h1><p>{connected ? '向当前 Agent 说明任务，让它结合上下文生成 Arborun 执行树。' : '正在连接 MCP 服务。'}</p>{!!sessions?.length && <ul>{sessions.map(s => <li key={s.id}><button onClick={() => void perform(() => bridge.read(s.id))}>{s.title}</button></li>)}</ul>}</section> : <>
       <div className="workspace-area" data-details={Boolean(inspector || request || showRecords)}>
-        <TreeCanvas key={session.id} session={session} selectedId={selectedId} onSelect={id => { setHoverId(null); select(id); }} taskOpen={taskOpen} onTaskToggle={open => setTaskOpen(open ?? !taskOpen)} onHover={hover} onEnter={id => {
+        <TreeCanvas key={session.id} session={session} selectedId={selectedId} onSelect={id => { setHoverId(null); select(id); }} taskOpen={taskOpen} onTaskToggle={open => { const next = open ?? !taskOpen; setTaskOpen(next); if (next) setAgentsOpen(false); }}
+          agentsOpen={agentsOpen} onAgentsToggle={open => { const next = open ?? !agentsOpen; setAgentsOpen(next); if (next) setTaskOpen(false); }} onHover={hover} onEnter={id => {
             if (editing) return;
             // Entering a single step or test opens its detail; entering a subtree starts with the tree alone.
             const entered = session.nodes.find(n => n.id === id);
@@ -273,6 +281,9 @@ function Arborun() {
           }}
           editing={editing} locateRequest={locateRequest} resetRequest={resetRequest} panelOpen={Boolean(inspector || request || showRecords)}
           impact={inspector?.mode === 'edit' && session.nodes.some(n => n.id === inspector.id) ? new Set(previewImpact(session, specs(session.nodes).find(n => n.id === inspector.id)!).map(n => n.id)) : undefined} />
+        {agentsOpen && <div className="task-sheet" role="region" aria-label="Agent">
+          <AgentsPanel session={session} busy={busy} onSave={saveAgents} onLocate={id => { setAgentsOpen(false); locate(id); }} onClose={() => setAgentsOpen(false)} />
+        </div>}
         {taskOpen && <div className="task-sheet" role="region" aria-label="整体任务">
           <NodeInspector key={`${session.id}:task`} session={session} nodeId={TASK_ID} mode="detail" busy={busy} editRevision={session.revision}
             onClose={() => setTaskOpen(false)} onEdit={() => {}} onSave={saveNode} onDelete={removeNode} onAdd={() => {}} onAskAi={askAi} onGenerateCases={generateCases} onRollback={rollback} loadArtifact={loadArtifact}

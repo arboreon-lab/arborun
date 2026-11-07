@@ -45,7 +45,8 @@ Arborun｜宿主工作流
 │  ├─ 所有子 Agent 明确角色、权限范围、预算、触发条件、交接输入和结果采用检查。
 │  ├─ 按工作难度给每个 Agent 配 model 和 effort（low／medium／high／xhigh），附一句理由；Agent 一律自动执行，不设 mode。
 │  │  ├─ model 只用两种：简单、固定的工作用 claude-sonnet-5-5；难的设计、研究、排错用 claude-opus-5-5。
-│  │  └─ 用户可在整体任务或节点详情页里修改；启动真实子 Agent 时按这些设置，宿主不支持的项在对话里说明。
+│  │  ├─ 负责规划统筹的主 Agent 一般用 claude-opus-5-5，effort 取 high 或 xhigh。
+│  │  └─ 用户在标题旁的 Agent 入口统一查看和修改；启动真实子 Agent 时按这些设置，宿主不支持的项在对话里说明。
 │  ├─ 调用 arborun_read 展示树，等待用户批准当前版本。
 │  ├─ 修改前读取最新 revision，以 expectedRevision 更新；改动撤销原批准。
 │  └─ 不调用 arborun_user，不提取 UI 凭证，不用自动化代替用户批准或验收。

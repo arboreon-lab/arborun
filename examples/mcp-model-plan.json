@@ -23,9 +23,9 @@
       "role": "拆分阶段、安排测试、汇总证据",
       "scope": "计划与验收记录",
       "budget": "不直接改代码",
-      "model": "claude-sonnet-5-5",
+      "model": "claude-opus-5-5",
       "effort": "high",
-      "reason": "安排和检查不难，思考要细。"
+      "reason": "规划和统筹全局，要想得深。"
     },
     {
       "id": "data",

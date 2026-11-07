@@ -146,3 +146,16 @@ video.media { width: 100%; cursor: auto; }
 .node-check h4 { margin: 0 0 4px; color: var(--ink); font-size: 13.5px; }
 .node-check p { color: var(--ink-2); font-size: 13px; }
 .node-check textarea { width: 100%; }
+
+/* Editing happens on the page itself: the same parts, made editable where they sit. */
+.editor.in-place { gap: 4px; padding: 0; }
+.panel-head-fill { flex: 1; }
+.title-edit { width: 100%; margin: 0 0 4px; padding-left: 0; font: 500 22px/1.35 var(--serif); color: var(--ink); background: transparent; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding: 4px 0 8px; }
+.title-edit:focus { outline: none; border-bottom-color: var(--accent); }
+.edit-stack { display: grid; gap: 10px; text-align: left; }
+.part-describe .edit-stack { max-width: 640px; margin: 0 auto; }
+.editor-more { display: grid; gap: 10px; margin-top: 8px; }
+.editor.in-place .impact { margin-top: 12px; }
+.editor.in-place .panel-foot { position: sticky; bottom: -24px; background: var(--surface); margin: 8px -22px -24px -26px; }
+.agent-doing { color: var(--ink-2) !important; font-size: 12.5px; }
+.agent-doing::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: var(--agent); vertical-align: 1px; }

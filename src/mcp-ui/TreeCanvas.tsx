@@ -24,6 +24,9 @@ export interface TreeCanvasProps {
   /** The whole task drops down from the title; the icon beside it toggles it. */
   taskOpen?: boolean;
   onTaskToggle?: (open?: boolean) => void;
+  /** All agents, with their model and effort, open from one icon beside the title. */
+  agentsOpen?: boolean;
+  onAgentsToggle?: (open?: boolean) => void;
   /** Hovering a node previews its details; null when the pointer leaves the nodes. */
   onHover?: (id: string | null) => void;
 }
@@ -42,6 +45,7 @@ const ICON = {
   // Arrows pulling into the corner: shrink to the overview. Arrows pushing out: open everything.
   fold: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7" /></svg>,
   unfold: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" /></svg>,
+  agents: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.2" /><path d="M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5" /><circle cx="17" cy="9" r="2.6" /><path d="M15.6 14.2c2.6.1 4.3 1.7 4.9 4.6" /></svg>,
   task: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3" /><path d="M8 9h8M8 13h8M8 17h5" /></svg>,
 };
 const loadOffsets = (): Record<string, Point> => { try { return JSON.parse(localStorage.getItem('arborun-card-offsets') || '{}') || {}; } catch { return {}; } };
@@ -65,7 +69,7 @@ export function Avatar({ session, agentId }: { session: Session; agentId: string
   return <span className="avatar" style={{ '--agent': agentColor(session, agentId) } as React.CSSProperties} title={name}>{name.slice(0, 1)}</span>;
 }
 
-export function TreeCanvas({ session, selectedId, onSelect, onEnter, editing = false, impact, locateRequest, resetRequest, panelOpen, taskOpen = false, onTaskToggle, onHover }: TreeCanvasProps) {
+export function TreeCanvas({ session, selectedId, onSelect, onEnter, editing = false, impact, locateRequest, resetRequest, panelOpen, taskOpen = false, onTaskToggle, agentsOpen = false, onAgentsToggle, onHover }: TreeCanvasProps) {
   const view = useMemo(() => buildView(session), [session]);
   const root = session.nodes.find(n => n.parentId === null)?.id ?? '';
   const [scope, setScope] = useState(root);
@@ -162,9 +166,11 @@ export function TreeCanvas({ session, selectedId, onSelect, onEnter, editing = f
   const groupsInScope = viewDescendants(view, scope).filter(id => isFolder(view.get(id)));
   const anyOpen = groupsInScope.some(id => expanded.has(id));
   // One click opens every node in this view, agent work included, or folds them all.
+  // Expanding or folding everything keeps the zoom and holds the first stage where it is on screen.
   const foldAll = () => {
+    const first = layout?.trunk[0], p = first ? layout?.pos.get(first) : undefined;
+    if (first && p) anchor.current = { id: first, x: camera.x + p.x * camera.zoom, y: camera.y + p.y * camera.zoom };
     setExpanded(anyOpen ? new Set() : new Set(groupsInScope));
-    needsFit.current = 'start'; setAnimate(true);
   };
   const switchView = () => { if (blocked()) return; setTreeView(v => v === 'tb' ? 'lr' : 'tb'); needsFit.current = 'start'; setAnimate(false); };
 
@@ -367,7 +373,9 @@ export function TreeCanvas({ session, selectedId, onSelect, onEnter, editing = f
           // The title is the whole task: it returns to the top level and opens the task's own details.
           ? <><button type="button" data-breadcrumb={n.id} data-task-title aria-current={n.id === scope ? 'page' : undefined} onClick={() => { if (blocked()) return; if (n.id !== scope) enter(n.id, true); else onTaskToggle?.(); }}>{session.title}</button>
             {onTaskToggle && <button type="button" className={`tool task-toggle${taskOpen ? ' open' : ''}`} data-task-toggle aria-expanded={taskOpen} aria-label={taskOpen ? '收起整体任务' : '展开整体任务'} title={taskOpen ? '收起整体任务' : '展开整体任务'}
-              onClick={() => { if (blocked()) return; if (n.id !== scope) enter(n.id, true); onTaskToggle(!taskOpen); }}>{ICON.task}</button>}</>
+              onClick={() => { if (blocked()) return; if (n.id !== scope) enter(n.id, true); onTaskToggle(!taskOpen); }}>{ICON.task}</button>}
+            {onAgentsToggle && <button type="button" className={`tool task-toggle${agentsOpen ? ' open' : ''}`} data-agents-toggle aria-expanded={agentsOpen} aria-label={agentsOpen ? '收起 Agent' : '查看和设置 Agent'} title={agentsOpen ? '收起 Agent' : '查看和设置 Agent'}
+              onClick={() => { if (!blocked()) onAgentsToggle(!agentsOpen); }}>{ICON.agents}</button>}</>
           : <button type="button" data-breadcrumb={n.id} aria-current={n.id === scope ? 'page' : undefined} onClick={() => n.id === scope ? !blocked() && onSelect(n.id) : enter(n.id, true)}>{n.title}</button>}</React.Fragment>)}</nav>
       <div className="tools">
         <button type="button" className="tool" data-fold aria-label={anyOpen ? '全部折叠' : '全部展开'} title={anyOpen ? '全部折叠' : '全部展开'} onClick={() => { if (!blocked()) foldAll(); }}>{anyOpen ? ICON.fold : ICON.unfold}</button>

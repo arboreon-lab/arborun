@@ -158,8 +158,11 @@ test('单击展开详情，双击进入任意节点，View 与层级返回共享
   // The top-right button opens every node in one click, agent work included, and folds them all again.
   await expect(page.locator('.region')).toHaveCount(0);
   const folded = await page.locator('.node').count();
+  const zoomBefore = (await geometry(page)).transform.match(/scale\(([^)]+)\)/)![1];
   await page.getByRole('button', { name: '全部展开', exact: true }).click();
   await expect.poll(() => page.locator('.node').count()).toBeGreaterThan(folded);
+  // Expanding everything keeps the zoom.
+  expect((await geometry(page)).transform.match(/scale\(([^)]+)\)/)![1]).toBe(zoomBefore);
   await expect(page.locator('.node[data-kind="action"]').first()).toBeVisible();
   await page.getByRole('button', { name: '全部折叠', exact: true }).click();
   await expect.poll(() => page.locator('.node').count()).toBe(folded);
@@ -317,25 +320,33 @@ test('长任务：节点完成后，测试里每个样例显示实际结果与�
   await page.locator('[data-task-toggle]').click();
   await expect(taskPanel(page)).toContainText('准确率不低于 95% 的模型，和一个拖照片就能试用的网页');
   for (const part of ['输入', '输出', '描述', '测试']) await expect(taskPanel(page).getByRole('heading', { name: part, exact: true })).toBeVisible();
-  // Each agent's model, effort and mode are set by how hard its work is, and the user can change them.
-  // Agent settings are a visible section of the task sheet, not hidden in a fold.
-  await expect(taskPanel(page).getByRole('region', { name: 'Agent 分工与模型' })).toBeVisible();
-  await expect(taskPanel(page).locator('[data-agent-id="train"] .agent-config')).toHaveText('claude-opus-5-5思考很高');
-  await expect(taskPanel(page).locator('[data-agent-id="data"] .agent-config')).toContainText('思考低');
-  await page.screenshot({ path: test.info().outputPath('reference-task-sheet.png') });
-  await taskPanel(page).getByRole('button', { name: '调整模型与力度', exact: true }).click();
-  await taskPanel(page).locator('[data-agent-id="data"]').getByLabel('思考力度').selectOption('medium');
+  // The task sheet no longer carries agent settings: they have one place of their own, beside the title.
+  await expect(taskPanel(page).locator('[data-agent-id]')).toHaveCount(0);
+  await page.locator('[data-task-toggle]').click();
+  await page.locator('[data-agents-toggle]').click();
+  const agentsPanel = page.getByRole('complementary', { name: 'Agent 详情' });
+  // The main, coordinating agent plans with opus at high effort; simple work uses sonnet.
+  await expect(agentsPanel.locator('[data-agent-id="main"] .agent-config')).toHaveText('claude-opus-5-5思考高');
+  await expect(agentsPanel.locator('[data-agent-id="train"] .agent-config')).toHaveText('claude-opus-5-5思考很高');
+  await expect(agentsPanel.locator('[data-agent-id="data"] .agent-config')).toContainText('claude-sonnet-5-5');
+  await page.screenshot({ path: test.info().outputPath('reference-agents.png') });
+  await agentsPanel.getByRole('button', { name: '调整模型与力度', exact: true }).click();
+  await agentsPanel.locator('[data-agent-id="data"]').getByLabel('思考力度').selectOption('medium');
   // The model is a real dropdown: switch to another known model, or type any name under 自定义.
-  await taskPanel(page).locator('[data-agent-id="train"]').getByLabel('模型').selectOption('claude-sonnet-5-5');
-  await expect(taskPanel(page).locator('[data-agent-id="train"]').getByLabel('模型').locator('option')).toHaveText(['claude-sonnet-5-5', 'claude-opus-5-5', '自定义…']);
-  await expect(taskPanel(page).locator('[data-agent-id="train"]').getByLabel('方式')).toHaveCount(0);
-  await taskPanel(page).locator('[data-agent-id="demo"]').getByLabel('模型').selectOption('__custom');
-  await taskPanel(page).locator('[data-agent-id="demo"]').getByPlaceholder('输入模型名称').fill('my-local-model');
-  await taskPanel(page).getByRole('button', { name: '保存为 v2', exact: true }).click();
+  await agentsPanel.locator('[data-agent-id="train"]').getByLabel('模型').selectOption('claude-sonnet-5-5');
+  await expect(agentsPanel.locator('[data-agent-id="train"]').getByLabel('模型').locator('option')).toHaveText(['claude-sonnet-5-5', 'claude-opus-5-5', '自定义…']);
+  await expect(agentsPanel.locator('[data-agent-id="train"]').getByLabel('方式')).toHaveCount(0);
+  await agentsPanel.locator('[data-agent-id="demo"]').getByLabel('模型').selectOption('__custom');
+  await agentsPanel.locator('[data-agent-id="demo"]').getByPlaceholder('输入模型名称').fill('my-local-model');
+  await agentsPanel.getByRole('button', { name: '保存为 v2', exact: true }).click();
   await expect.poll(async () => (await current()).agents.find(a => a.id === 'data')?.effort).toBe('medium');
   expect((await current()).agents.find(a => a.id === 'train')?.model).toBe('claude-sonnet-5-5');
   expect((await current()).agents.find(a => a.id === 'demo')?.model).toBe('my-local-model');
   expect((await current()).revision).toBe(2);
+  await dismissNotice(page);
+  await page.keyboard.press('Escape');
+  await expect(agentsPanel).toHaveCount(0);
+  await page.locator('[data-task-toggle]').click();
   await taskPanel(page).getByRole('button', { name: '批准 v2 并执行', exact: true }).click();
   await expect(taskPanel(page).getByRole('button', { name: '暂停执行', exact: true })).toBeVisible();
   await dismissNotice(page);
@@ -378,9 +389,8 @@ test('长任务：节点完成后，测试里每个样例显示实际结果与�
   await expect(video).toBeVisible();
   await expect.poll(() => video.evaluate(v => (v as HTMLVideoElement).readyState)).toBeGreaterThan(0);
   await page.screenshot({ path: test.info().outputPath('reference-sample-results.png'), fullPage: true });
-  // The page of a step shows the agent that runs it, with its model and effort, editable right there.
-  const doer = inspector(page).getByRole('region', { name: '执行的 Agent' });
-  await expect(doer.locator('[data-agent-id="data"] .agent-config')).toContainText('思考中');
+  // A step's page does not show agent model or effort; those live in the Agent panel.
+  await expect(inspector(page).locator('[data-agent-id]')).toHaveCount(0);
   // The step's own acceptance sits under its tests: not satisfied, stop everything and go back to this step.
   const check = inspector(page).locator('[data-node-check="d-scan"]');
   await check.getByRole('button', { name: '不满意，中止并回到这里', exact: true }).click();
@@ -391,8 +401,9 @@ test('长任务：节点完成后，测试里每个样例显示实际结果与�
   expect(after.approval).toBeUndefined();
   expect(after.nodes.find(n => n.id === 'd-scan')!.status).toBe('stale');
   expect(after.aiRequests[0]).toContain('坏图也要记下原因');
-  // The step opens for editing right away.
+  // The step opens for editing right away, on the same four-part page.
   await expect(page.locator('[data-inspector-mode="edit"]')).toBeVisible();
+  for (const part of ['描述', '输入', '输出', '测试']) await expect(inspector(page).getByRole('heading', { name: part, exact: true })).toBeVisible();
   await expect(inspector(page)).toHaveAttribute('data-inspector-node', 'd-scan');
 });
 
