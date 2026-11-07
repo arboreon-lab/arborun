@@ -3,7 +3,9 @@ import type { NodeSpec, NodeState, Session } from '../mcp/schema';
 export function nodeSpecification(node: NodeSpec): NodeSpec {
   return { id: node.id, parentId: node.parentId, kind: node.kind, ...(node.by ? { by: node.by } : {}), title: node.title, action: node.action,
     target: node.target, input: node.input, acceptance: [...node.acceptance], failure: node.failure,
-    dependsOn: [...node.dependsOn], ...(node.when ? { when: { ...node.when } } : {}), agentId: node.agentId };
+    dependsOn: [...node.dependsOn], ...(node.when ? { when: { ...node.when } } : {}), agentId: node.agentId,
+    ...(node.output ? { output: node.output } : {}), ...(node.mapping ? { mapping: node.mapping } : {}),
+    ...(node.constraints?.length ? { constraints: [...node.constraints] } : {}), ...(node.cases?.length ? { cases: node.cases.map(c => ({ ...c })) } : {}) };
 }
 
 export function subtreeIds(nodes: NodeSpec[], id: string): Set<string> {

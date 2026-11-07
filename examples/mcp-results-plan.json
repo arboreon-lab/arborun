@@ -165,7 +165,30 @@
       ],
       "failure": "记录未通过的检查与证据；在预算内自动修复，超出预算时停下并说明原因。",
       "dependsOn": [],
-      "agentId": "export"
+      "agentId": "export",
+      "output": "下载的文件字节流以 EF BB BF 开头",
+      "mapping": "在序列化后的 CSV 文本前加 UTF-8 BOM，再交给下载逻辑；Excel 2016 据此按 UTF-8 解析中文。",
+      "constraints": [
+        "只加一次 BOM，不重复",
+        "不改变后续内容的编码"
+      ],
+      "cases": [
+        {
+          "kind": "normal",
+          "input": "含中文的 3 行订单",
+          "expected": "文件以 EF BB BF 开头，中文正常"
+        },
+        {
+          "kind": "boundary",
+          "input": "只有表头、没有数据行",
+          "expected": "仍以 BOM 开头，表头正常"
+        },
+        {
+          "kind": "extreme",
+          "input": "5 万行订单",
+          "expected": "只在开头有一个 BOM，导出不超时"
+        }
+      ]
     },
     {
       "id": "a-bom-opt",
@@ -213,7 +236,30 @@
         "a-quote"
       ],
       "agentId": "compat",
-      "by": "user"
+      "by": "user",
+      "output": "每个样本打开后的列数与原数据一致",
+      "mapping": "用 Excel 2016 逐个打开 samples/ 中导出的文件，数每一行的列数，与源数据的字段数比对。",
+      "constraints": [
+        "使用 Excel 2016 双击打开，不用导入向导",
+        "截图作为证据"
+      ],
+      "cases": [
+        {
+          "kind": "normal",
+          "input": "comma.csv：备注含一个逗号",
+          "expected": "5 列"
+        },
+        {
+          "kind": "boundary",
+          "input": "备注以逗号开头或结尾",
+          "expected": "5 列，逗号留在备注内"
+        },
+        {
+          "kind": "extreme",
+          "input": "备注同时含逗号、引号、换行和 emoji",
+          "expected": "5 列，备注完整显示在一个单元格"
+        }
+      ]
     },
     {
       "id": "t-esc-multi",
@@ -246,7 +292,46 @@
       ],
       "failure": "记录未通过的检查与证据；在预算内自动修复，超出预算时停下并说明原因。",
       "dependsOn": [],
-      "agentId": "export"
+      "agentId": "export",
+      "output": "escapeCell(value) 返回可直接写入 CSV 的单元格文本",
+      "mapping": "含逗号、双引号或换行的值整体用双引号包住，值内的每个双引号写成两个；其他值原样输出，空值输出空字符串。",
+      "constraints": [
+        "遵循 RFC 4180",
+        "不改变不含特殊字符的值",
+        "只修改 src/exportCsv.ts 及其测试"
+      ],
+      "cases": [
+        {
+          "kind": "normal",
+          "input": "张三",
+          "expected": "张三"
+        },
+        {
+          "kind": "normal",
+          "input": "a,b",
+          "expected": "\"a,b\""
+        },
+        {
+          "kind": "boundary",
+          "input": "空字符串",
+          "expected": "空字符串"
+        },
+        {
+          "kind": "boundary",
+          "input": "只有一个双引号 \"",
+          "expected": "\"\"\"\""
+        },
+        {
+          "kind": "extreme",
+          "input": "10 万字符、混合逗号引号换行的备注",
+          "expected": "整体加引号，内部引号全部成对，长度正确"
+        },
+        {
+          "kind": "extreme",
+          "input": "null / undefined",
+          "expected": "空字符串，不抛错"
+        }
+      ]
     },
     {
       "id": "a-newline",

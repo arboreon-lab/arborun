@@ -22,6 +22,8 @@ const spec = (node: NodeSpec): NodeSpec => ({
   id: node.id, parentId: node.parentId, kind: node.kind, ...(node.by ? { by: node.by } : {}), title: node.title,
   action: node.action, target: node.target, input: node.input, acceptance: [...node.acceptance],
   failure: node.failure, dependsOn: [...node.dependsOn], ...(node.when ? { when: clone(node.when) } : {}), agentId: node.agentId,
+  ...(node.output ? { output: node.output } : {}), ...(node.mapping ? { mapping: node.mapping } : {}),
+  ...(node.constraints?.length ? { constraints: [...node.constraints] } : {}), ...(node.cases?.length ? { cases: node.cases.map(c => ({ ...c })) } : {}),
 });
 function planHash(session: Session): string {
   return hash({ title: session.title, goal: session.goal, context: session.context, nodes: session.nodes.map(spec), agents: session.agents,
@@ -437,7 +439,13 @@ export class ArborunService {
       if (node.when) details.push(`触发条件：${node.when.nodeId} = ${node.when.outcome}`);
       if (node.kind === 'result') details.push(`要达到的效果：${node.action}`);
       if (!isContainer(node)) {
-        details.push(`动作：${node.action}`, `对象：${node.target}`, `输入：${node.input}`, `通过条件：${node.acceptance.join('；')}`, `失败处理：${node.failure}`);
+        details.push(`动作：${node.action}`, `对象：${node.target}`, `输入：${node.input}`);
+        if (node.output) details.push(`输出：${node.output}`);
+        if (node.mapping) details.push(`说明：${node.mapping}`);
+        if (node.constraints?.length) details.push(`约束：${node.constraints.join('；')}`);
+        details.push(`通过条件：${node.acceptance.join('；')}`, `失败处理：${node.failure}`);
+        const caseNames = { normal: '正常值', boundary: '边界情况', extreme: '极端情况' } as const;
+        for (const c of node.cases ?? []) details.push(`测试样例·${caseNames[c.kind]}：${c.input} → ${c.expected}`);
         if (node.dependsOn.length) details.push(`执行依赖：${node.dependsOn.join('、')}`);
         if (node.conditionOutcome !== undefined) details.push(`条件结果：${node.conditionOutcome}`);
         if (node.attemptId) details.push(`执行记录：${node.attemptId}`);

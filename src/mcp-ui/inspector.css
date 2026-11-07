@@ -67,3 +67,21 @@
 .qa { display: grid; gap: 10px; margin: 0; }
 .qa dt { color: var(--muted); font-size: 13.5px; }
 .qa dd { margin: 2px 0 0; color: var(--ink); font-size: 14.5px; }
+
+/* Step and test spec: input, output, mapping, constraints, samples. */
+.where { display: flex; gap: 10px; margin-top: 6px; font-size: 14px; color: var(--muted); }
+.where .mono { color: var(--ink-2); overflow-wrap: anywhere; }
+.plain.outcome { list-style: "✓  "; }
+.panel-section .fields { margin-top: 6px; }
+.case-group + .case-group { margin-top: 10px; }
+.case-group h4 { display: flex; align-items: baseline; gap: 8px; margin: 0 0 4px; }
+.case-group h4 span { font-weight: 400; font-size: 12.5px; color: var(--muted); }
+.case-group[data-case-kind="boundary"] h4 { color: var(--wait); }
+.case-group[data-case-kind="extreme"] h4 { color: var(--fail); }
+.cases { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.cases li { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 8px; align-items: start; padding: 5px 9px; border: 1.2px solid var(--line); border-radius: var(--wobble-2); font-size: 14px; }
+.cases .in { color: var(--ink); overflow-wrap: anywhere; }
+.cases .arrow { color: var(--faint); }
+.cases .out { color: var(--ink-2); overflow-wrap: anywhere; }
+.cases-edit { border: 1.4px dashed var(--line-strong); border-radius: var(--wobble-2); padding: 8px 10px; display: grid; gap: 6px; }
+.cases-edit legend { color: var(--muted); font-size: 13.5px; padding: 0 4px; }

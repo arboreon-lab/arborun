@@ -37699,6 +37699,7 @@ var id = external_exports.string().trim().min(1).max(120).regex(/^[^\s\u0000-\u0
 var text = external_exports.string().trim().min(1).max(12e3);
 var short = external_exports.string().trim().min(1).max(300);
 var revision = external_exports.number().int().positive();
+var caseSchema = external_exports.object({ kind: external_exports.enum(["normal", "boundary", "extreme"]), input: text, expected: text }).strict();
 var nodeSchema = external_exports.object({
   // result: an effect the person can see; test: how that effect is proven (who set it is recorded in `by`).
   id,
@@ -37712,6 +37713,11 @@ var nodeSchema = external_exports.object({
   acceptance: external_exports.array(text).max(30).default([]),
   failure: external_exports.string().max(12e3).default(""),
   dependsOn: external_exports.array(id).max(100).default([]),
+  // What the step produces, one paragraph on how input becomes output, the limits it must respect, and its test samples.
+  output: external_exports.string().trim().max(12e3).optional(),
+  mapping: external_exports.string().trim().max(12e3).optional(),
+  constraints: external_exports.array(text).max(30).optional(),
+  cases: external_exports.array(caseSchema).max(30).optional(),
   when: external_exports.object({ nodeId: id, outcome: external_exports.boolean() }).strict().optional(),
   agentId: id.default("main")
 }).strict();
@@ -37799,7 +37805,11 @@ var spec = (node2) => ({
   failure: node2.failure,
   dependsOn: [...node2.dependsOn],
   ...node2.when ? { when: clone2(node2.when) } : {},
-  agentId: node2.agentId
+  agentId: node2.agentId,
+  ...node2.output ? { output: node2.output } : {},
+  ...node2.mapping ? { mapping: node2.mapping } : {},
+  ...node2.constraints?.length ? { constraints: [...node2.constraints] } : {},
+  ...node2.cases?.length ? { cases: node2.cases.map((c) => ({ ...c })) } : {}
 });
 function planHash(session) {
   return hash2({
@@ -38319,7 +38329,13 @@ var ArborunService = class {
       if (node2.when) details.push(`\u89E6\u53D1\u6761\u4EF6\uFF1A${node2.when.nodeId} = ${node2.when.outcome}`);
       if (node2.kind === "result") details.push(`\u8981\u8FBE\u5230\u7684\u6548\u679C\uFF1A${node2.action}`);
       if (!isContainer(node2)) {
-        details.push(`\u52A8\u4F5C\uFF1A${node2.action}`, `\u5BF9\u8C61\uFF1A${node2.target}`, `\u8F93\u5165\uFF1A${node2.input}`, `\u901A\u8FC7\u6761\u4EF6\uFF1A${node2.acceptance.join("\uFF1B")}`, `\u5931\u8D25\u5904\u7406\uFF1A${node2.failure}`);
+        details.push(`\u52A8\u4F5C\uFF1A${node2.action}`, `\u5BF9\u8C61\uFF1A${node2.target}`, `\u8F93\u5165\uFF1A${node2.input}`);
+        if (node2.output) details.push(`\u8F93\u51FA\uFF1A${node2.output}`);
+        if (node2.mapping) details.push(`\u8BF4\u660E\uFF1A${node2.mapping}`);
+        if (node2.constraints?.length) details.push(`\u7EA6\u675F\uFF1A${node2.constraints.join("\uFF1B")}`);
+        details.push(`\u901A\u8FC7\u6761\u4EF6\uFF1A${node2.acceptance.join("\uFF1B")}`, `\u5931\u8D25\u5904\u7406\uFF1A${node2.failure}`);
+        const caseNames = { normal: "\u6B63\u5E38\u503C", boundary: "\u8FB9\u754C\u60C5\u51B5", extreme: "\u6781\u7AEF\u60C5\u51B5" };
+        for (const c of node2.cases ?? []) details.push(`\u6D4B\u8BD5\u6837\u4F8B\xB7${caseNames[c.kind]}\uFF1A${c.input} \u2192 ${c.expected}`);
         if (node2.dependsOn.length) details.push(`\u6267\u884C\u4F9D\u8D56\uFF1A${node2.dependsOn.join("\u3001")}`);
         if (node2.conditionOutcome !== void 0) details.push(`\u6761\u4EF6\u7ED3\u679C\uFF1A${node2.conditionOutcome}`);
         if (node2.attemptId) details.push(`\u6267\u884C\u8BB0\u5F55\uFF1A${node2.attemptId}`);
@@ -38344,7 +38360,7 @@ var ArborunRuntime = class {
     this.options = options;
     this.service = new ArborunService(options.snapshot, { recover: true });
     this.mcp = new McpServer({ name: "arborun", version: "0.2.3" }, {
-      instructions: 'Arborun coordinates a user-editable execution tree, built around what the user will check. Before proposing a plan, ask the user in the normal conversation to resolve missing requirements and decisions; record confirmed answers in clarifications and never put unanswered requirements into the tree. Plan with the root children as the trunk in order; put each visible outcome in a kind=result node, with kind=test nodes under it ("when ..., you should see ...", by=user for tests the user stated or confirmed, by=agent for tests you add) and the action nodes that implement it. Each action/test states target, input, acceptance and failure route. Show the tree and stop for the user to approve it in the Arborun panel; never approve or accept for the user and never use browser automation on the panel. After approval read the latest revision, claim each node before acting, do the work with your own tools, report actual evidence and checks, report observable actions and messages through arborun_activity, then submit the results tree for human acceptance. Continue normal conversation output. A changed plan revokes approval; do not continue with old claims. If the host cannot show the panel, Arborun opens it in the local browser.'
+      instructions: 'Arborun coordinates a user-editable execution tree, built around what the user will check. Before proposing a plan, ask the user in the normal conversation to resolve missing requirements and decisions; record confirmed answers in clarifications and never put unanswered requirements into the tree. Plan with the root children as the trunk in order; put each visible outcome in a kind=result node, with kind=test nodes under it ("when ..., you should see ...", by=user for tests the user stated or confirmed, by=agent for tests you add) and the action nodes that implement it. Each action/test states target, input, output, a one-paragraph mapping of how the input becomes the output, constraints, acceptance and failure route, and generate cases: concrete samples with at least one normal value, one boundary case and one extreme case, each with input and expected output. Show the tree and stop for the user to approve it in the Arborun panel; never approve or accept for the user and never use browser automation on the panel. After approval read the latest revision, claim each node before acting, do the work with your own tools, report actual evidence and checks, report observable actions and messages through arborun_activity, then submit the results tree for human acceptance. Continue normal conversation output. A changed plan revokes approval; do not continue with old claims. If the host cannot show the panel, Arborun opens it in the local browser.'
     });
     this.register();
   }
@@ -38423,7 +38439,7 @@ var ArborunRuntime = class {
     }, safe(async (args) => this.result(await this.read(args.sessionId, args.afterSequence))));
     K3(this.mcp, "arborun_plan", {
       title: "\u751F\u6210\u6216\u4FEE\u6539\u6267\u884C\u6811",
-      description: 'Ask unresolved requirement questions in the normal host conversation first, then propose a concrete tree from confirmed requirements and relevant context. Provide confirmed question/answer records in clarifications; unanswered records are rejected without creating or changing a tree. Organise the tree around what the user will check: the children of the root are the trunk in order; put each visible outcome in a kind=result node whose action states the effect, and under it kind=test nodes ("\u5F53\u2026\u2026\u65F6\uFF0C\u5E94\u8BE5\u770B\u5230\u2026\u2026", with by=user for tests the user stated or confirmed, by=agent for tests you add) plus the action nodes that implement it. Each action/test needs target, input, acceptance and failure route. Tests the user set cannot be changed or removed by a plan update. Parent is containment; dependsOn is execution dependency. Conditional nodes use when; each planned agent has role/scope/budget. Updating requires expectedRevision and always revokes old approval. Then show UI and wait for the user.',
+      description: 'Ask unresolved requirement questions in the normal host conversation first, then propose a concrete tree from confirmed requirements and relevant context. Provide confirmed question/answer records in clarifications; unanswered records are rejected without creating or changing a tree. Organise the tree around what the user will check: the children of the root are the trunk in order; put each visible outcome in a kind=result node whose action states the effect, and under it kind=test nodes ("\u5F53\u2026\u2026\u65F6\uFF0C\u5E94\u8BE5\u770B\u5230\u2026\u2026", with by=user for tests the user stated or confirmed, by=agent for tests you add) plus the action nodes that implement it. Each action/test needs target, input, output, mapping (one paragraph: how the input becomes the output), constraints, acceptance and failure route, plus generated cases with kind normal, boundary and extreme (at least one of each; concrete input and expected output). Tests the user set cannot be changed or removed by a plan update. Parent is containment; dependsOn is execution dependency. Conditional nodes use when; each planned agent has role/scope/budget. Updating requires expectedRevision and always revokes old approval. Then show UI and wait for the user.',
       inputSchema: proposeSchema,
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       _meta: { ui: { resourceUri: RESOURCE }, "openai/ui": display }

@@ -6,7 +6,7 @@ import { TreeCanvas } from './TreeCanvas';
 import { ACCEPT_ID } from './canvas-model';
 import { NodeInspector } from './NodeInspector';
 import { Overview } from './Overview';
-import { previewImpact } from './inspector-model';
+import { nodeSpecification, previewImpact } from './inspector-model';
 import './styles.css';
 
 const bridge = new TreeBridge();
@@ -14,8 +14,7 @@ const EXPANDED_HEIGHT = 640;
 const phaseNames: Record<Session['status'], string> = {
   draft: '待批准', approved: '已批准', running: '执行中', paused: '已暂停', review: '待验收', accepted: '用户已验收',
 };
-const specs = (nodes: NodeState[]): NodeSpec[] => nodes.map(({ id, parentId, kind, by, title, action, target, input, acceptance, failure, dependsOn, when, agentId }) =>
-  ({ id, parentId, kind, ...(by ? { by } : {}), title, action, target, input, acceptance, failure, dependsOn, ...(when ? { when } : {}), agentId }));
+const specs = (nodes: NodeState[]): NodeSpec[] => nodes.map(nodeSpecification);
 const sequence = (session: Session) => session.events.at(-1)?.sequence ?? 0;
 type UserOperation = UserActionInput extends infer T ? T extends UserActionInput ? Omit<T, 'sessionId' | 'expectedRevision'> : never : never;
 type InspectorMode = 'detail' | 'edit' | 'add';
@@ -158,6 +157,15 @@ function Arborun() {
     const sent = await signalHost(`请读取 Arborun 执行树 ${session.id}，根据用户要求更新计划：${message}。更新后等待用户在树中批准，勿提前执行。`);
     setRequest(sent === 'sent' ? undefined : { ...request, completed: true }); setNote('');
   });
+  // One click asks the host agent for samples; the plan change still needs the user's approval.
+  const generateCases = (id: string) => perform(async () => {
+    const target = session?.nodes.find(n => n.id === id);
+    if (!session || !target) return;
+    const message = `为「${target.title}」（${id}）生成测试样例：正常值、边界情况、极端情况各至少一个，写明具体输入与期望输出；同时补全输出、映射说明与约束`;
+    await act({ type: 'requestAi', message });
+    const sent = await signalHost(`请读取 Arborun 执行树 ${session.id}，${message}。更新后等待用户在树中批准，勿提前执行。`);
+    if (sent !== 'sent') { setInspector(undefined); setRequest({ target: id, rework: false, revision: session.revision, completed: true }); }
+  });
   const locate = (id: string) => {
     setShowRecords(false); setLocateRequest({ id, key: Date.now() });
     openInspector(id);
@@ -208,7 +216,7 @@ function Arborun() {
           editing={editing} locateRequest={locateRequest} resetRequest={resetRequest} panelOpen={Boolean(inspector || request || showRecords)}
           impact={inspector?.mode === 'edit' && session.nodes.some(n => n.id === inspector.id) ? new Set(previewImpact(session, specs(session.nodes).find(n => n.id === inspector.id)!).map(n => n.id)) : undefined} />
         {inspector && <NodeInspector key={`${session.id}:${inspector.id}:${inspector.mode}`} session={session} nodeId={inspector.id} mode={inspector.mode} busy={busy} editRevision={inspector.revision}
-          onClose={() => { setInspector(undefined); setSelectedId(null); }} onEdit={() => openInspector(inspector.id, 'edit')} onSave={saveNode} onDelete={removeNode} onAdd={id => openInspector(id, 'add')} onAskAi={askAi} onLocate={locate}
+          onClose={() => { setInspector(undefined); setSelectedId(null); }} onEdit={() => openInspector(inspector.id, 'edit')} onSave={saveNode} onDelete={removeNode} onAdd={id => openInspector(id, 'add')} onAskAi={askAi} onGenerateCases={generateCases} onLocate={locate}
           onRecords={() => { setInspector(undefined); setShowRecords(true); }} onResetPosition={id => setResetRequest({ id, key: Date.now() })}
           taskActions={inspector.mode === 'detail' && (inspector.id === rootId || inspector.id === ACCEPT_ID) ? taskActions : undefined} />}
         {request && <aside className="side-panel request-panel" aria-label={request.rework ? '返工要求' : 'AI 修改要求'}><div className="panel-head"><h2>{request.completed ? '修改要求已保存' : request.rework ? '要求返工' : '让 AI 修改'}</h2><button className="icon-btn" aria-label="关闭" onClick={() => setRequest(undefined)}>×</button></div>

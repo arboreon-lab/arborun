@@ -5,6 +5,8 @@ const text = z.string().trim().min(1).max(12000);
 const short = z.string().trim().min(1).max(300);
 const revision = z.number().int().positive();
 
+/** A concrete sample for a step or test: an ordinary value, an edge of the valid range, or an extreme input. */
+export const caseSchema = z.object({ kind: z.enum(['normal', 'boundary', 'extreme']), input: text, expected: text }).strict();
 export const nodeSchema = z.object({
   // result: an effect the person can see; test: how that effect is proven (who set it is recorded in `by`).
   id, parentId: id.nullable(), kind: z.enum(['group', 'result', 'test', 'action', 'condition', 'agent']),
@@ -12,6 +14,9 @@ export const nodeSchema = z.object({
   title: short, action: z.string().max(12000).default(''), target: z.string().max(2000).default(''),
   input: z.string().max(12000).default(''), acceptance: z.array(text).max(30).default([]),
   failure: z.string().max(12000).default(''), dependsOn: z.array(id).max(100).default([]),
+  // What the step produces, one paragraph on how input becomes output, the limits it must respect, and its test samples.
+  output: z.string().trim().max(12000).optional(), mapping: z.string().trim().max(12000).optional(),
+  constraints: z.array(text).max(30).optional(), cases: z.array(caseSchema).max(30).optional(),
   when: z.object({ nodeId: id, outcome: z.boolean() }).strict().optional(),
   agentId: id.default('main'),
 }).strict();
@@ -55,6 +60,7 @@ export const userActionSchema = z.discriminatedUnion('type', [
 ]);
 
 export type NodeSpec = z.infer<typeof nodeSchema>;
+export type TestCase = z.infer<typeof caseSchema>;
 export type AgentSpec = z.infer<typeof agentSchema>;
 export type ProposeInput = z.input<typeof proposeSchema>;
 export type ClaimInput = z.input<typeof claimSchema>;

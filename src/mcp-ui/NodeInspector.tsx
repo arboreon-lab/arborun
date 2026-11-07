@@ -1,5 +1,5 @@
 import { useId, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { NodeSpec, NodeState, Session } from '../mcp/schema';
+import type { NodeSpec, NodeState, Session, TestCase } from '../mcp/schema';
 import { ACCEPT_ID, activeAttempts, agentColor, aggregateStatus, buildView, counts, isContainer, stateLabel, viewDescendants, type ViewNode } from './canvas-model';
 import { currentWork, nodeActivities } from './collaboration-model';
 import { deletionImpact, nodeSpecification, previewImpact, subtreeIds } from './inspector-model';
@@ -19,6 +19,8 @@ export interface NodeInspectorProps {
   onDelete: (nodeId: string) => Promise<void>;
   onAdd: (parentId: string) => void;
   onAskAi: (nodeId: string | null, rework?: boolean) => void;
+  /** Ask the host agent to generate normal, boundary and extreme samples for a node. */
+  onGenerateCases?: (nodeId: string) => void;
   onLocate: (nodeId: string) => void;
   onResetPosition?: (nodeId?: string) => void;
   /** Approve / pause / accept controls for the whole task. */
@@ -28,6 +30,13 @@ export interface NodeInspectorProps {
 
 const kindNames: Record<NodeSpec['kind'], string> = { group: '分组', result: '效果', test: '测试', action: '执行步骤', condition: '条件判断', agent: 'Agent 分支' };
 const splitLines = (value: string) => value.split('\n').map(line => line.trim()).filter(Boolean);
+const caseKinds = [['normal', '正常值'], ['boundary', '边界情况'], ['extreme', '极端情况']] as const;
+/** Samples are edited one per line as "输入 → 期望输出". */
+const casesText = (cases: TestCase[] | undefined, kind: TestCase['kind']) => (cases ?? []).filter(c => c.kind === kind).map(c => `${c.input} → ${c.expected}`).join('\n');
+const parseCases = (kind: TestCase['kind'], value: string): TestCase[] => splitLines(value).map(line => {
+  const [input, ...rest] = line.split(/\s*(?:→|->|=>)\s*/);
+  return { kind, input: input.trim(), expected: rest.join(' → ').trim() };
+});
 const isImage = (value: string) => /^data:image\//i.test(value) || /^https?:\/\/\S+\.(png|jpe?g|gif|webp|svg)(\?\S*)?$/i.test(value);
 
 function Field({ label, value, onChange, multiline = false, required = false, maxLength, hint }: {
@@ -45,6 +54,8 @@ function Editor({ node, session, busy, editRevision, onSave, onCancel, adding }:
 }) {
   const [draft, setDraft] = useState(() => nodeSpecification(node));
   const [criteria, setCriteria] = useState(node.acceptance.join('\n'));
+  const [constraints, setConstraints] = useState((node.constraints ?? []).join('\n'));
+  const [cases, setCases] = useState(() => Object.fromEntries(caseKinds.map(([k]) => [k, casesText(node.cases, k)])) as Record<TestCase['kind'], string>);
   const [error, setError] = useState('');
   const change = <K extends keyof NodeSpec>(key: K, value: NodeSpec[K]) => setDraft(previous => ({ ...previous, [key]: value }));
   const descendants = subtreeIds(session.nodes, draft.id);
@@ -59,7 +70,11 @@ function Editor({ node, session, busy, editRevision, onSave, onCancel, adding }:
     setError('');
     if (deleted) { setError('此节点已在新版本中删除。草稿仍保留，请复制所需内容后关闭。'); return; }
     // A test the person saves is theirs: it becomes part of the acceptance contract.
-    const next: NodeSpec = { ...draft, title: draft.title.trim(), acceptance: splitLines(criteria), ...(isTest ? { by: 'user' as const } : { by: undefined }) };
+    const samples = caseKinds.flatMap(([k]) => parseCases(k, cases[k]));
+    const next: NodeSpec = { ...draft, title: draft.title.trim(), acceptance: splitLines(criteria), ...(isTest ? { by: 'user' as const } : { by: undefined }),
+      output: draft.output?.trim() || undefined, mapping: draft.mapping?.trim() || undefined,
+      constraints: splitLines(constraints).length ? splitLines(constraints) : undefined, cases: samples.length ? samples : undefined };
+    if (samples.some(c => !c.input || !c.expected)) { setError('测试样例每行写成“输入 → 期望输出”。'); return; }
     if (!next.title) { setError('请填写标题。'); return; }
     if (next.kind === 'result' && !next.action.trim()) { setError('请写明要达到的效果。'); return; }
     if (!container && (!next.action.trim() || !next.target.trim() || !next.input.trim() || !next.failure.trim() || !next.acceptance.length)) {
@@ -88,19 +103,26 @@ function Editor({ node, session, busy, editRevision, onSave, onCancel, adding }:
     </div>
     {draft.kind === 'result' && <Field label="要达到的效果" value={draft.action} onChange={value => change('action', value)} multiline required maxLength={12000} hint="用户能看到什么、在哪里看到" />}
     {isTest && <>
-      <Field label="测试内容" value={draft.action} onChange={value => change('action', value)} multiline required maxLength={12000} hint="当……时，应该看到……" />
-      <Field label="应该看到（每行一项）" value={criteria} onChange={setCriteria} multiline required />
+      <Field label="输入：用什么数据" value={draft.input} onChange={value => change('input', value)} multiline required maxLength={12000} />
       <Field label="在哪里测" value={draft.target} onChange={value => change('target', value)} required maxLength={2000} hint="页面、文件或命令" />
-      <Field label="用什么数据" value={draft.input} onChange={value => change('input', value)} multiline required maxLength={12000} />
-      <Field label="不通过时" value={draft.failure} onChange={value => change('failure', value)} multiline required maxLength={12000} />
-      <p className="note">保存后这项测试由你设定，成为验收标准；Agent 只能补充测试，不能修改它。</p>
+      <Field label="输出：应该看到（每行一项）" value={criteria} onChange={setCriteria} multiline required />
+      <Field label="说明：测试内容" value={draft.action} onChange={value => change('action', value)} multiline required maxLength={12000} hint="当……时，应该看到……" />
     </>}
     {!container && !isTest && <>
-      <Field label="具体动作" value={draft.action} onChange={value => change('action', value)} multiline required maxLength={12000} />
-      <Field label="操作对象 / 文件位置" value={draft.target} onChange={value => change('target', value)} required maxLength={2000} />
       <Field label="输入与依据" value={draft.input} onChange={value => change('input', value)} multiline required maxLength={12000} />
+      <Field label="操作对象 / 文件位置" value={draft.target} onChange={value => change('target', value)} required maxLength={2000} />
+      <Field label="输出" value={draft.output ?? ''} onChange={value => change('output', value)} multiline maxLength={12000} hint="这一步产出什么" />
       <Field label="通过条件（每行一项）" value={criteria} onChange={setCriteria} multiline required />
-      <Field label="不通过时如何处理" value={draft.failure} onChange={value => change('failure', value)} multiline required maxLength={12000} />
+      <Field label="具体动作" value={draft.action} onChange={value => change('action', value)} multiline required maxLength={12000} />
+    </>}
+    {!container && <>
+      <Field label="说明：输入如何变成输出" value={draft.mapping ?? ''} onChange={value => change('mapping', value)} multiline maxLength={12000} hint="一段话说明映射关系" />
+      <Field label="约束（每行一项）" value={constraints} onChange={setConstraints} multiline />
+      <Field label={isTest ? '不通过时' : '不通过时如何处理'} value={draft.failure} onChange={value => change('failure', value)} multiline required maxLength={12000} />
+      <fieldset className="cases-edit"><legend>测试样例（每行“输入 → 期望输出”）</legend>
+        {caseKinds.map(([k, name]) => <Field key={k} label={name} value={cases[k]} onChange={value => setCases(c => ({ ...c, [k]: value }))} multiline />)}
+      </fieldset>
+      {isTest && <p className="note">保存后这项测试由你设定，成为验收标准；Agent 只能补充测试，不能修改它。</p>}
     </>}
     <label className="field"><span>属于</span><select value={draft.parentId || ''} disabled={isRoot} onChange={event => change('parentId', event.target.value || null)}>
       {isRoot && <option value="">无（根节点）</option>}{session.nodes.filter(item => !descendants.has(item.id) && ['group', 'result', 'agent'].includes(item.kind)).map(item => <option key={item.id} value={item.id}>{item.title}</option>)}
@@ -157,6 +179,34 @@ function TestRows({ session, view, ids, onLocate }: { session: Session; view: Ma
     <span className={`s ${n.status}`}>{stateLabel(session, view, id)}</span></button></li>; })}</ul>;
 }
 
+/** How a step or test reads in the panel: input, output, how one maps to the other, its limits, and its samples. */
+function Spec({ node, session, view, onLocate, onGenerateCases, busy }: { node: NodeState; session: Session; view: Map<string, ViewNode>; onLocate: (id: string) => void; onGenerateCases?: (id: string) => void; busy: boolean }) {
+  const isTest = node.kind === 'test';
+  const limits = node.constraints ?? [];
+  return <>
+    <Section title="输入"><p>{node.input}</p>{node.target && <p className="where"><span>{isTest ? '在哪里测' : '位置'}</span><span className="mono">{node.target}</span></p>}</Section>
+    <Section title="输出">{node.output && <p>{node.output}</p>}
+      {!!node.acceptance.length && <ul className="plain outcome">{node.acceptance.map((item, i) => <li key={i}>{item}</li>)}</ul>}
+      {node.conditionOutcome !== undefined && <p>判断结果：{node.conditionOutcome === 'unknown' ? '未知 · 等待依据' : node.conditionOutcome ? '成立' : '不成立'}</p>}</Section>
+    <Section title="说明"><p>{node.mapping || node.action}</p>{node.mapping && node.action && <p className="note">{isTest ? '测试内容' : '动作'}：{node.action}</p>}</Section>
+    <Section title="约束">
+      {!!limits.length && <ul className="plain">{limits.map((item, i) => <li key={i}>{item}</li>)}</ul>}
+      <dl className="fields">
+        {!!node.dependsOn.length && <div><dt>先完成</dt><dd><Links session={session} view={view} ids={node.dependsOn} onLocate={onLocate} /></dd></div>}
+        {node.when && <div><dt>触发条件</dt><dd><Links session={session} view={view} ids={[node.when.nodeId]} onLocate={onLocate} />{node.when.outcome ? '成立' : '不成立'}时执行</dd></div>}
+        <div><dt>不通过时</dt><dd>{node.failure}</dd></div>
+      </dl></Section>
+    <Section title="测试样例">{node.cases?.length
+      ? caseKinds.map(([k, name]) => { const rows = node.cases!.filter(c => c.kind === k); return <div key={k} className="case-group" data-case-kind={k}>
+          <h4>{name}<span>{rows.length}</span></h4>
+          {rows.length ? <ul className="cases">{rows.map((c, i) => <li key={i}><span className="in">{c.input}</span><span className="arrow" aria-label="期望">→</span><span className="out">{c.expected}</span></li>)}</ul> : <p className="note">缺少{name}样例。</p>}
+        </div>; })
+      : <p className="note">还没有测试样例。</p>}
+      {onGenerateCases && (!node.cases?.length || caseKinds.some(([k]) => !node.cases!.some(c => c.kind === k))) && <div className="row"><button type="button" className="btn" disabled={busy} onClick={() => onGenerateCases(node.id)}>让 Agent 生成测试样例</button></div>}
+    </Section>
+  </>;
+}
+
 function Details(props: NodeInspectorProps & { node: NodeState; view: Map<string, ViewNode> }) {
   const { node, session, view, onLocate } = props;
   const kids = view.get(node.id)?.children ?? [];
@@ -183,13 +233,11 @@ function Details(props: NodeInspectorProps & { node: NodeState; view: Map<string
     const result = view.get(node.parentId!)?.kind === 'result' ? node.parentId! : undefined;
     const fixing = node.status === 'failed' && result ? activeAttempts(session).find(a => viewDescendants(view, result).includes(a.nodeId) && session.nodes.find(n => n.id === a.nodeId)?.kind !== 'test') : undefined;
     return <>
-      <Section title="测试"><p>{node.action}</p>{!!node.acceptance.length && <ul className="plain">{node.acceptance.map((item, i) => <li key={i}>应该看到：{item}</li>)}</ul>}
-        <dl className="fields"><div><dt>在哪里测</dt><dd>{node.target}</dd></div><div><dt>数据</dt><dd>{node.input}</dd></div></dl></Section>
       <Live session={session} nodeId={node.id} />
       {node.result && <Section><div className={`callout ${node.status === 'failed' ? 'fail' : node.status === 'passed' ? 'pass' : ''}`}><p>{node.result}</p></div></Section>}
+      <Spec node={node} session={session} view={view} onLocate={onLocate} onGenerateCases={props.onGenerateCases} busy={props.busy} />
       <Section title="证据"><Evidence node={node} session={session} /></Section>
       {fixing && <Section title="处理"><p>Agent 正在自动修复，不需要你处理：</p><Live session={session} nodeId={fixing.nodeId} /><Links session={session} view={view} ids={[fixing.nodeId]} onLocate={onLocate} /></Section>}
-      {!fixing && node.status === 'failed' && <Section title="不通过时"><p>{node.failure}</p></Section>}
       {result && <Section title="所属效果"><Links session={session} view={view} ids={[result]} onLocate={onLocate} /></Section>}
       <Messages session={session} nodeId={node.id} />
     </>;
@@ -201,13 +249,7 @@ function Details(props: NodeInspectorProps & { node: NodeState; view: Map<string
   return <>
     <Live session={session} nodeId={node.id} />
     {node.result && <Section><div className={`callout ${node.status === 'failed' ? 'fail' : node.status === 'passed' ? 'pass' : ''}`}><p>{node.result}</p></div></Section>}
-    <Section title="做什么"><dl className="fields">
-      <div><dt>动作</dt><dd>{node.action}</dd></div><div><dt>位置</dt><dd className="mono">{node.target}</dd></div><div><dt>输入</dt><dd>{node.input}</dd></div>
-      <div><dt>通过条件</dt><dd><ul className="plain">{node.acceptance.map((item, i) => <li key={i}>{item}</li>)}</ul></dd></div><div><dt>不通过时</dt><dd>{node.failure}</dd></div>
-      {node.when && <div><dt>触发条件</dt><dd><Links session={session} view={view} ids={[node.when.nodeId]} onLocate={onLocate} />{node.when.outcome ? '成立' : '不成立'}时执行</dd></div>}
-      {node.conditionOutcome !== undefined && <div><dt>判断结果</dt><dd>{node.conditionOutcome === 'unknown' ? '未知 · 等待依据' : node.conditionOutcome ? '成立' : '不成立'}</dd></div>}
-      {!!node.dependsOn.length && <div><dt>先完成</dt><dd><Links session={session} view={view} ids={node.dependsOn} onLocate={onLocate} /></dd></div>}
-    </dl></Section>
+    <Spec node={node} session={session} view={view} onLocate={onLocate} onGenerateCases={props.onGenerateCases} busy={props.busy} />
     {(node.evidence?.length || node.attemptId) ? <Section title="证据"><Evidence node={node} session={session} /></Section> : null}
     <Messages session={session} nodeId={node.id} />
     {agent && <details className="panel-section fold"><summary>Agent 范围与预算</summary><dl className="fields"><div><dt>范围</dt><dd>{agent.scope}</dd></div><div><dt>预算</dt><dd>{agent.budget}</dd></div></dl></details>}

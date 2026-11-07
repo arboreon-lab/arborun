@@ -62,4 +62,27 @@ describe('以效果为中心的计划', () => {
     expect(tree).toContain('双击打开中文正常（t-open）｜待执行｜用户设定');
     expect(tree).toContain('导入向导读取正常（t-wizard）｜待执行｜Agent 补充');
   });
+
+  it('步骤带输入、输出、映射说明、约束与三类测试样例；改样例生成新版本并撤销批准', () => {
+    const cases = [
+      { kind: 'normal' as const, input: '张三', expected: '张三' },
+      { kind: 'boundary' as const, input: '空字符串', expected: '空字符串' },
+      { kind: 'extreme' as const, input: '10 万字符的备注', expected: '整体加引号且不截断' },
+    ];
+    const detailed = { ...work, output: '下载文件以 EF BB BF 开头', mapping: '序列化后在开头加 BOM 再下载', constraints: ['只加一次 BOM'], cases };
+    const service = new ArborunService(), id = service.propose(plan([root, result, userTest, agentTest, detailed])).id;
+    const saved = service.get(id).nodes.find(n => n.id === 'a-bom')!;
+    expect([saved.output, saved.mapping, saved.constraints, saved.cases]).toEqual([detailed.output, detailed.mapping, detailed.constraints, cases]);
+    const tree = service.renderTree(id);
+    expect(tree).toContain('输出：下载文件以 EF BB BF 开头');
+    expect(tree).toContain('说明：序列化后在开头加 BOM 再下载');
+    expect(tree).toContain('约束：只加一次 BOM');
+    expect(tree).toContain('测试样例·边界情况：空字符串 → 空字符串');
+    expect(() => service.propose(plan([root, result, userTest, agentTest, { ...work, cases: [{ kind: 'huge' as never, input: 'x', expected: 'y' }] }]))).toThrow();
+    service.userAction({ type: 'approve', sessionId: id, expectedRevision: 1 });
+    const edited = service.userAction({ type: 'edit', sessionId: id, expectedRevision: 1, nodes: [root, result, userTest, agentTest, { ...detailed, cases: cases.slice(0, 2) }] });
+    expect(edited.revision).toBe(2);
+    expect(edited.status).toBe('draft');
+    expect(edited.nodes.find(n => n.id === 'a-bom')!.cases).toHaveLength(2);
+  });
 });
