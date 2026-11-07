@@ -235,14 +235,19 @@ export function TreeCanvas({ session, selectedId, onSelect, onEnter, editing = f
     // the second click enters the card the first click selected. Clicks without a count (keyboard, scripts) fall back to timing.
     const now = performance.now();
     if (event.detail >= 2 || (event.detail === 0 && lastClick.current?.id === id && now - lastClick.current.t < 420)) {
+      window.clearTimeout(openTimer.current);
       const target = event.detail >= 2 && lastClick.current ? lastClick.current.id : id;
       lastClick.current = null;
       if (event.detail <= 2) enter(target);
       return;
     }
     lastClick.current = { id, t: now };
-    onSelect(id);
+    // A single click opens the full-screen details; it waits a moment so a double click can still enter the node.
+    window.clearTimeout(openTimer.current);
+    if (event.detail === 1) openTimer.current = window.setTimeout(() => onSelect(id), 260);
+    else onSelect(id);
   };
+  const openTimer = useRef<number | undefined>(undefined);
   const onDoubleClick = (event: React.MouseEvent) => {
     if ((event.target as HTMLElement).closest('.node,.region,.msg-chip')) return;
     if (layout) { setAnimate(true); setCamera(fitCamera(layout, size.current.w, size.current.h, true)); }

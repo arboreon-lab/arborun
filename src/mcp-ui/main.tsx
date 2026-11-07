@@ -11,15 +11,15 @@ import './styles.css';
 
 const bridge = new TreeBridge();
 /**
- * Node details pop up from the top or bottom of the canvas, on the side away from the node, so the node stays visible.
- * The sheet takes the free space on that side (at least 240px; a pinned sheet up to 62% of the canvas, a hover preview 50%).
+ * Hover previews pop up from the top or bottom of the canvas, on the side away from the node, so the node stays visible.
+ * The preview takes the free space on that side (at least 240px, at most half the canvas). A click opens the full-screen page.
  */
 type SheetPlace = { top: boolean; height: number };
-function placeFor(id: string, pinned = false): SheetPlace {
+function placeFor(id: string): SheetPlace {
   const area = document.querySelector('.workspace-area')?.getBoundingClientRect();
   const node = document.querySelector(`[data-node-id="${CSS.escape(id)}"]`)?.getBoundingClientRect();
   if (!area) return { top: false, height: 320 };
-  const head = 56, max = (area.height - head) * (pinned ? .62 : .5);
+  const head = 56, max = (area.height - head) * .5;
   if (!node) return { top: false, height: Math.round(Math.max(240, max)) };
   const top = (node.top + node.bottom) / 2 > area.top + area.height / 2;
   const free = top ? node.top - area.top - head : area.bottom - node.bottom;
@@ -53,7 +53,6 @@ function Arborun() {
   const [taskOpen, setTaskOpen] = useState(false);
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [hoverPlace, setHoverPlace] = useState<SheetPlace>({ top: false, height: 320 });
-  const [pinnedPlace, setPinnedPlace] = useState<SheetPlace>({ top: false, height: 320 });
   const hoverTimer = useRef<number | undefined>(undefined);
   const overPanel = useRef(false);
   const inspectorRef = useRef<string | undefined>(undefined);
@@ -143,8 +142,6 @@ function Arborun() {
   };
   const openInspector = (id: string, mode: InspectorMode = 'detail') => {
     if (!session) return;
-    // A sheet that is already open stays where it is, so the pointer is not left over some other node.
-    if (!inspector) setPinnedPlace(placeFor(id, true));
     window.clearTimeout(hoverTimer.current); setHoverId(null);
     if (inspector?.mode === 'edit' || inspector?.mode === 'add' || request) { setNotice('请先保存或取消当前编辑。'); return; }
     setSelectedId(id); setRequest(undefined); setInspector({ id, mode, revision: session.revision });
@@ -162,11 +159,17 @@ function Arborun() {
       setHoverId(id);
     }, id ? 140 : 260);
   };
+  // Esc leaves the full-screen node page (drafts stay until saved or cancelled).
+  useEffect(() => {
+    if (inspector?.mode !== 'detail') return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') { setInspector(undefined); setSelectedId(null); } };
+    window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey);
+  }, [inspector?.mode, inspector?.id]);
   const select = (id: string | null) => {
     // Canvas navigation must not move selection away from an open draft.
     if (inspector?.mode === 'edit' || inspector?.mode === 'add' || request) return;
     setSelectedId(id);
-    if (id) { setPinnedPlace(placeFor(id, true)); setTaskOpen(false); }
+    if (id) setTaskOpen(false);
     setInspector(id && session ? { id, mode: 'detail', revision: session.revision } : undefined);
   };
   const saveNode = (node: NodeSpec) => perform(async () => {
@@ -191,7 +194,7 @@ function Arborun() {
     await act({ type: 'rollback', nodeId: id, ...(message ? { message } : {}) });
     await signalHost(`用户对 Arborun 执行树 ${session.id} 中的「${target?.title ?? id}」不满意，已中止执行并回退到这个节点${message ? `：${message}` : ''}。请立即停止所有正在进行的动作，读取最新树；${message ? '按用户意见修改这个节点后用 arborun_plan 提交，' : ''}等待用户修改并重新批准，勿继续执行。`);
     setHoverId(null); setTaskOpen(false);
-    if (session.nodes.some(n => n.id === id)) { setSelectedId(id); setPinnedPlace(placeFor(id, true)); setInspector({ id, mode: 'edit', revision: session.revision }); }
+    if (session.nodes.some(n => n.id === id)) { setSelectedId(id); setInspector({ id, mode: 'edit', revision: session.revision }); }
   });
   const removeNode = (id: string) => perform(async () => {
     if (!session || !inspector) return;
@@ -279,8 +282,8 @@ function Arborun() {
           <NodeInspector key={`${session.id}:hover:${hoverId}`} session={session} nodeId={hoverId} mode="detail" busy={busy} editRevision={session.revision}
             onClose={() => setHoverId(null)} onEdit={() => { setHoverId(null); openInspector(hoverId, 'edit'); }} onSave={saveNode} onDelete={removeNode} onAdd={id => { setHoverId(null); openInspector(id, 'add'); }} onAskAi={askAi} onGenerateCases={generateCases} onRollback={rollback} loadArtifact={loadArtifact}
             onLocate={id => { setHoverId(null); locate(id); }} taskActions={hoverId === ACCEPT_ID ? taskActions : undefined} />
-        </div> : inspector && <div className={`node-sheet pinned-panel ${pinnedPlace.top ? 'top' : 'bottom'}`} style={{ height: pinnedPlace.height }} onMouseEnter={() => { overPanel.current = true; }} onMouseLeave={() => { overPanel.current = false; }}><NodeInspector key={`${session.id}:${inspector.id}:${inspector.mode}`} session={session} nodeId={inspector.id} mode={inspector.mode} busy={busy} editRevision={inspector.revision}
-          onClose={() => { setInspector(undefined); setSelectedId(null); }} onEdit={() => openInspector(inspector.id, 'edit')} onSave={saveNode} onDelete={removeNode} onAdd={id => openInspector(id, 'add')} onAskAi={askAi} onGenerateCases={generateCases} onRollback={rollback} loadArtifact={loadArtifact} onLocate={locate}
+        </div> : inspector && <div className="node-page" role="dialog" aria-modal="true" aria-label="节点详情页"><NodeInspector key={`${session.id}:${inspector.id}:${inspector.mode}`} session={session} nodeId={inspector.id} mode={inspector.mode} busy={busy} editRevision={inspector.revision}
+          onClose={() => { setInspector(undefined); setSelectedId(null); }} onEdit={() => openInspector(inspector.id, 'edit')} onSave={saveNode} onDelete={removeNode} onAdd={id => openInspector(id, 'add')} onAskAi={askAi} onGenerateCases={generateCases} onRollback={rollback} onSaveAgents={saveAgents} loadArtifact={loadArtifact} onLocate={locate}
           onRecords={() => { setInspector(undefined); setShowRecords(true); }} onResetPosition={id => setResetRequest({ id, key: Date.now() })}
           taskActions={inspector.mode === 'detail' && (inspector.id === TASK_ID || inspector.id === ACCEPT_ID) ? taskActions : undefined} /></div>}
         {request && <aside className="side-panel request-panel" aria-label={request.rework ? '返工要求' : 'AI 修改要求'}><div className="panel-head"><h2>{request.completed ? '修改要求已保存' : request.rework ? '要求返工' : '让 AI 修改'}</h2><button className="icon-btn" aria-label="关闭" onClick={() => setRequest(undefined)}>×</button></div>

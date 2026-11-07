@@ -247,31 +247,37 @@ const Outcome = ({ node }: { node: NodeState }) => node.result ? <Section><div c
 
 const effortNames = { low: '低', medium: '中', high: '高', xhigh: '很高' } as const;
 const modeNames = { readonly: '只读', ask: '改动前先问', auto: '自动执行' } as const;
-/** Who does what, and with which model, effort and mode; set by the planning agent from how hard the work is, editable here. */
-function Agents({ session, busy, onSave }: { session: Session; busy: boolean; onSave?: (agents: AgentSpec[]) => Promise<void> }) {
+/**
+ * Who does what, and with which model, effort and mode. The planning agent sets them by how hard the work is; the person
+ * changes them here (all agents in the task sheet, or the agents behind one node on its page). Saving makes a new version.
+ */
+function Agents({ session, busy, onSave, ids, title = 'Agent 分工与模型' }: { session: Session; busy: boolean; onSave?: (agents: AgentSpec[]) => Promise<void>; ids?: string[]; title?: string }) {
   const [draft, setDraft] = useState<AgentSpec[] | null>(null);
   const [error, setError] = useState('');
+  const shown = (draft ?? session.agents).filter(a => !ids || ids.includes(a.id));
+  if (!shown.length) return null;
   const set = (id: string, patch: Partial<AgentSpec>) => setDraft(d => d!.map(a => a.id === id ? { ...a, ...patch } : a));
   const save = async () => {
     setError('');
     try { await onSave!(draft!.map(a => ({ ...a, model: a.model?.trim() || undefined }))); setDraft(null); }
     catch (failure) { setError(failure instanceof Error ? failure.message : '保存失败'); }
   };
-  return <details className="fold agents-fold" open={Boolean(draft) || undefined}><summary>Agent 分工（{session.agents.length}）</summary>
-    <ul className="agents">{(draft ?? session.agents).map(a => <li key={a.id} data-agent-id={a.id}><Avatar session={session} agentId={a.id} /><div>
+  return <section className="panel-section agents-section" aria-label={title}><h3>{title}</h3>
+    <ul className="agents">{shown.map(a => <li key={a.id} data-agent-id={a.id}><Avatar session={session} agentId={a.id} /><div>
       <strong>{a.name}</strong> · {a.role}
       {draft ? <div className="agent-config edit">
-        <label>模型<input value={a.model ?? ''} placeholder="沿用默认" maxLength={100} onChange={e => set(a.id, { model: e.target.value })} /></label>
+        <label>模型<input value={a.model ?? ''} placeholder="沿用默认" maxLength={100} list="arborun-models" onChange={e => set(a.id, { model: e.target.value })} /></label>
         <label>思考力度<select value={a.effort ?? ''} onChange={e => set(a.id, { effort: (e.target.value || undefined) as AgentSpec['effort'] })}><option value="">默认</option>{Object.entries(effortNames).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
         <label>方式<select value={a.mode ?? ''} onChange={e => set(a.id, { mode: (e.target.value || undefined) as AgentSpec['mode'] })}><option value="">默认</option>{Object.entries(modeNames).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
       </div> : <p className="agent-config">{[a.model ?? '默认模型', a.effort ? `思考${effortNames[a.effort]}` : '默认力度', a.mode ? modeNames[a.mode] : '默认方式'].map((t, i) => <span key={i} className="chip-flat">{t}</span>)}</p>}
       {a.reason && <p className="note">{a.reason}</p>}
-      <p>负责：{a.scope}</p><p>上限：{a.budget}</p></div></li>)}</ul>
+      {!ids && <><p>负责：{a.scope}</p><p>上限：{a.budget}</p></>}</div></li>)}</ul>
+    <datalist id="arborun-models">{[...new Set(session.agents.map(a => a.model).filter(Boolean))].map(m => <option key={m} value={m} />)}</datalist>
     {onSave && (draft
-      ? <><p className="note">保存后生成新版本，需要重新批准。</p>{error && <p role="alert" className="callout fail">{error}</p>}
+      ? <><p className="note">保存后生成新版本，需要重新批准；宿主支持时，Agent 按这里的模型和力度执行。</p>{error && <p role="alert" className="callout fail">{error}</p>}
           <div className="row"><button type="button" className="btn" disabled={busy} onClick={() => setDraft(null)}>取消</button><button type="button" className="btn primary" disabled={busy} onClick={() => void save()}>保存为 v{session.revision + 1}</button></div></>
-      : <div className="row"><button type="button" className="btn" disabled={busy} onClick={() => setDraft(session.agents.map(a => ({ ...a })))}>调整模型与方式</button></div>)}
-  </details>;
+      : <div className="row"><button type="button" className="btn" disabled={busy} onClick={() => setDraft(session.agents.map(a => ({ ...a })))}>调整模型与力度</button></div>)}
+  </section>;
 }
 
 /** The whole task, opened from the title: where it starts, what it delivers, the stages between, and every test. */
@@ -291,12 +297,13 @@ function WholeTask(props: NodeInspectorProps & { view: Map<string, ViewNode> }) 
             <li className="end"><span>输出 · 用户验收</span></li>
           </ol>
           {!!session.clarifications?.length && <details className="fold"><summary>已确认的要求（{session.clarifications.length}）</summary><dl className="qa">{session.clarifications.map((item, index) => <div key={index}><dt>{item.question}</dt><dd>{item.answer}</dd></div>)}</dl></details>}
-          <Agents session={session} busy={props.busy} onSave={props.onSaveAgents} /></>}
+</>}
         input={<>{ends.input ? <p>{ends.input}</p> : <Unfilled />}
           {!!session.context.length && <details className="fold"><summary>依据的资料（{session.context.length}）</summary><ul>{session.context.map((item, i) => <li key={i}>{item}</li>)}</ul></details>}</>}
         output={<><p>{ends.output}</p><p className="note">最后交给你验收</p></>}
         tests={results.length ? results.map(r => <div key={r.id} className="accept-item"><h4><button type="button" className="link-plain" onClick={() => onLocate(r.id)}><Glyph session={session} view={view} id={r.id} size={14} />{r.title}</button></h4>
           <TestRows session={session} view={view} ids={testsUnder(r.id)} onLocate={onLocate} /></div>) : <TestRows session={session} view={view} ids={testsUnder(node.id)} onLocate={onLocate} />} />
+    <Agents session={session} busy={props.busy} onSave={props.onSaveAgents} />
     </>;
   }
 
@@ -356,7 +363,8 @@ function Details(props: NodeInspectorProps & { node: NodeState; view: Map<string
   if (isContainer(node)) {
     const result = node.kind === 'result', tests = result ? kids.filter(id => view.get(id)?.node?.kind === 'test') : testsUnder(node.id);
     const workId = kids.find(id => view.get(id)?.kind === 'work');
-    return <Parts
+    const doers = [...new Set(session.nodes.filter(n => !isContainer(n) && viewDescendants(view, node.id).includes(n.id)).map(n => n.agentId))];
+    return <><Parts
       describe={<><Describe node={node} view={view} onLocate={onLocate} fallback={!result && node.output ? node.action : undefined} />
         {!result && <><p className="note">包含：</p><Links session={session} view={view} ids={kids} onLocate={onLocate} /></>}
         {workId && <details className="fold"><summary>Agent 要做的步骤（{view.get(workId)!.children.length}）· {stateLabel(session, view, workId)}</summary><Links session={session} view={view} ids={view.get(workId)!.children} onLocate={onLocate} /></details>}</>}
@@ -365,7 +373,8 @@ function Details(props: NodeInspectorProps & { node: NodeState; view: Map<string
       tests={<>{tests.length ? <TestRows session={session} view={view} ids={tests} onLocate={onLocate} /> : <p className="note">这里还没有测试。</p>}
         {result && !!tests.length && <p className="note">你设定的测试是验收标准；Agent 补充的只是额外检查。</p>}
         {!!node.cases?.length && samples}
-        <NodeCheck node={node} session={session} view={view} busy={props.busy} onRollback={props.onRollback} /></>} />;
+        <NodeCheck node={node} session={session} view={view} busy={props.busy} onRollback={props.onRollback} /></>} />
+      <Agents session={session} busy={props.busy} onSave={props.onSaveAgents} ids={doers} title="执行的 Agent" /></>;
   }
   const isTest = node.kind === 'test';
   const result = isTest && view.get(node.parentId!)?.kind === 'result' ? node.parentId! : undefined;
@@ -383,6 +392,7 @@ function Details(props: NodeInspectorProps & { node: NodeState; view: Map<string
       tests={<>{samples}<OtherEvidence node={node} session={session} />
         {(node.caseResults?.length || node.evidence?.length) ? <p className="note">以上由 Agent 提供，仍需你确认。</p> : null}
         <NodeCheck node={node} session={session} view={view} busy={props.busy} onRollback={props.onRollback} /></>} />
+    <Agents session={session} busy={props.busy} onSave={props.onSaveAgents} ids={[node.agentId]} title="执行的 Agent" />
     {fixing && <Section title="处理"><p>Agent 正在自动修复，你不用处理：</p><Live session={session} nodeId={fixing.nodeId} /><Links session={session} view={view} ids={[fixing.nodeId]} onLocate={onLocate} /></Section>}
     {result && <Section title="所属效果"><Links session={session} view={view} ids={[result]} onLocate={onLocate} /></Section>}
     <Messages session={session} nodeId={node.id} />
@@ -474,7 +484,6 @@ export function NodeInspector(props: NodeInspectorProps) {
     <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></svg></button>
     {menuOpen && <><div className="menu-dismiss" onClick={() => setMenuOpen(false)} aria-hidden="true" /><div className="menu" role="menu" aria-label="节点操作">
       <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); props.onEdit(); }}>{node.kind === 'test' ? '编辑测试' : '编辑内容'}</button>
-      <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); props.onAskAi(nodeId); }}>让 AI 修改</button>
       {['group', 'result', 'agent'].includes(node.kind) && <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); props.onAdd(nodeId); }}>{node.kind === 'result' ? '添加测试' : '添加子节点'}</button>}
       {props.onResetPosition && <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); props.onResetPosition?.(nodeId); }}>恢复卡片默认位置</button>}
       {props.onResetPosition && <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); props.onResetPosition?.(); }}>恢复所有卡片位置</button>}
@@ -485,9 +494,7 @@ export function NodeInspector(props: NodeInspectorProps) {
     : node.kind === 'test' ? (node.by === 'user'
       ? <button type="button" className="btn" disabled={busy} onClick={props.onEdit}>编辑测试</button>
       : <button type="button" className="btn" disabled={busy} onClick={() => { void props.onSave({ ...nodeSpecification(current), by: 'user' }); }}>设为验收标准</button>)
-    : current.status === 'failed' && !isContainer(current) ? <button type="button" className="btn primary" disabled={busy} onClick={() => props.onAskAi(nodeId)}>让 AI 修正</button>
-    : node.parentId === null ? undefined : isContainer(current) ? <button type="button" className="btn" disabled={busy} onClick={() => props.onAskAi(nodeId)}>让 AI 修改</button>
-    : <><button type="button" className="btn" disabled={busy} onClick={() => props.onAskAi(nodeId)}>让 AI 修改</button><button type="button" className="btn" disabled={busy} onClick={props.onEdit}>编辑</button></>;
+    : node.parentId === null ? undefined : <button type="button" className="btn" disabled={busy} onClick={props.onEdit}>编辑</button>;
   return <ArtifactLoader.Provider value={props.loadArtifact}><Shell session={session} view={view} id={nodeId} title={title} status={nodeStatus} menu={menu} onClose={onClose} busy={busy} foot={foot}>
     <div ref={contentRef} data-inspector-mode={mode}>
       {mode === 'detail' ? current ? <>
