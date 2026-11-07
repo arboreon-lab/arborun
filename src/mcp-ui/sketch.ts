@@ -1,7 +1,7 @@
 import rough from 'roughjs';
 import type { Drawable } from 'roughjs/bin/core';
 import type { NodeState } from '../mcp/schema';
-import { CARD_H, CARD_W, type Point } from './canvas-model';
+import { NODE_D, RING_GAP, RING_W, type Point } from './canvas-model';
 
 /** Hand-drawn strokes as SVG path markup. Every element has a fixed seed so its lines stay put between renders. */
 const gen = rough.generator();
@@ -29,15 +29,42 @@ export function glyphMarkup(id: string, kind: GlyphKind, status: NodeState['stat
 }
 
 export interface CardLook { color: string; width: number; dashed?: boolean; stacked?: boolean; hatch?: boolean; selected?: boolean; live?: boolean }
-/** Card outline drawn into a (W+12)×(H+12) box. `frame` varies the seed so running cards can "boil". */
+/** Space around the circle inside the node's sketch box: outline wobble plus the progress ring. */
+export const SKETCH_M = 16;
+const C = SKETCH_M + NODE_D / 2;
+/** Node outline: a hand-drawn circle in a (D+2M)² box. `frame` varies the seed so running nodes "boil". */
 export function cardMarkup(id: string, look: CardLook, frame = 0) {
-  const seed = seedOf(id) + frame * 97, x = 6, y = 6, W = CARD_W, H = CARD_H;
-  const base = { stroke: look.color, strokeWidth: look.width, roughness: 1.15, bowing: 1.2, seed, ...(look.dashed ? { strokeLineDash: [5, 5] } : {}) };
+  const seed = seedOf(id) + frame * 97, D = NODE_D;
+  const base = { stroke: look.color, strokeWidth: look.width, roughness: 1.1, bowing: 1, seed, ...(look.dashed ? { strokeLineDash: [6, 6] } : {}) };
   let out = '';
-  if (look.stacked) out += draw(gen.rectangle(x + 8, y + 8, W, H, { ...base, stroke: 'var(--faint)', strokeWidth: 1.1, seed: seed + 1 }), gen.rectangle(x + 4, y + 4, W, H, { ...base, stroke: 'var(--line-strong)', strokeWidth: 1.1, seed: seed + 2 }));
-  if (look.hatch) out += `<g opacity=".22">${draw(gen.rectangle(x + 3, y + 3, W - 6, H - 6, { stroke: 'none', fill: look.color, fillStyle: 'hachure', hachureGap: 9, hachureAngle: -41, fillWeight: .8, roughness: 1.2, seed }))}</g>`;
-  out += draw(gen.rectangle(x, y, W, H, base));
-  if (look.selected || look.live) out += draw(gen.rectangle(x - 1.5, y - 1.5, W + 3, H + 3, { ...base, strokeWidth: look.selected ? 1.1 : .9, seed: seed + 5, roughness: 1.6 }));
+  if (look.stacked) out += draw(gen.circle(C + 9, C + 7, D, { ...base, stroke: 'var(--faint)', strokeWidth: 1.1, seed: seed + 1 }), gen.circle(C + 5, C + 4, D, { ...base, stroke: 'var(--line-strong)', strokeWidth: 1.1, seed: seed + 2 }));
+  if (look.hatch) out += `<g opacity=".2">${draw(gen.circle(C, C, D - 8, { stroke: 'none', fill: look.color, fillStyle: 'hachure', hachureGap: 10, hachureAngle: -41, fillWeight: .8, roughness: 1.2, seed }))}</g>`;
+  out += draw(gen.circle(C, C, D, base));
+  if (look.selected) out += draw(gen.circle(C, C, D - 7, { ...base, strokeWidth: 1, seed: seed + 5, roughness: 1.5 }));
+  return out;
+}
+
+/** One agent's arc of the progress ring: its share of the circle, how much of that share is done, and whether it is working now. */
+export interface RingSegment { agentId: string; color: string; share: number; done: number; running: boolean; single: boolean }
+/**
+ * Progress drawn as a stroke around the node: each agent owns an arc in its own colour, sized by its share of the work,
+ * and inks it clockwise from the top as its steps and tests pass. Work still ahead is a faint dotted trace.
+ */
+export function ringMarkup(id: string, segments: RingSegment[]) {
+  const r = NODE_D / 2 + RING_GAP, gap = segments.length > 1 ? .09 : 0, seed = seedOf(`ring:${id}`);
+  let a = -Math.PI / 2, out = '';
+  segments.forEach((s, i) => {
+    const span = Math.PI * 2 * s.share - gap, drawn = span * Math.min(1, s.done), sd = seed + i * 13;
+    const arc = (from: number, to: number, x: object) => gen.arc(C, C, r * 2, r * 2, from, to, false, { stroke: s.color, seed: sd, disableMultiStroke: true, ...x });
+    if (span - drawn > .03) out += `<g class="ring-rest" opacity=".55">${draw(arc(a + drawn, a + span, { strokeWidth: 1.3, roughness: .5, strokeLineDash: [2, 7] }))}</g>`;
+    if (drawn > .02) out += `<g class="ring-done" data-agent="${s.agentId}">${draw(arc(a, a + drawn, { strokeWidth: RING_W, roughness: .7, bowing: .6 }))}</g>`;
+    if (s.running) {
+      const t = a + drawn;
+      if (s.single) out += `<g class="ring-spin" style="transform-origin:${C}px ${C}px" data-agent="${s.agentId}">${draw(arc(t, t + 1.1, { strokeWidth: RING_W, roughness: .6 }))}</g>`;
+      else out += `<circle class="ring-tip" cx="${C + r * Math.cos(t)}" cy="${C + r * Math.sin(t)}" r="4.6" style="fill:${s.color};transform-origin:${C + r * Math.cos(t)}px ${C + r * Math.sin(t)}px" data-agent="${s.agentId}"/>`;
+    }
+    a += span + gap;
+  });
   return out;
 }
 export function frameMarkup(id: string, w: number, h: number, color: string, solid: boolean) {
@@ -50,8 +77,8 @@ export function edgeMarkup(pts: Point[], key: string, color: string, width: numb
 }
 
 const border = (a: Point, b: Point) => {
-  const dx = b.x - a.x, dy = b.y - a.y, t = Math.min((CARD_W / 2) / Math.max(Math.abs(dx), .001), (CARD_H / 2) / Math.max(Math.abs(dy), .001));
-  return { x: a.x + dx * t, y: a.y + dy * t };
+  const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1, r = NODE_D / 2 + RING_GAP + RING_W + 3;
+  return { x: a.x + dx / len * r, y: a.y + dy / len * r };
 };
 export type Curve = [number, number, number, number, number, number, number, number];
 export function messageCurve(a: Point, b: Point, lane: number): Curve {

@@ -1,6 +1,6 @@
 import { useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { NodeSpec, NodeState, Session } from '../mcp/schema';
-import { ACCEPT_ID, activeAttempts, aggregateStatus, buildView, counts, isContainer, stateLabel, viewDescendants, type ViewNode } from './canvas-model';
+import { ACCEPT_ID, activeAttempts, agentColor, aggregateStatus, buildView, counts, isContainer, stateLabel, viewDescendants, type ViewNode } from './canvas-model';
 import { currentWork, nodeActivities } from './collaboration-model';
 import { deletionImpact, nodeSpecification, previewImpact, subtreeIds } from './inspector-model';
 import { Avatar, Glyph, MiniBar } from './TreeCanvas';
@@ -135,7 +135,7 @@ function Live({ session, nodeId }: { session: Session; nodeId: string }) {
   const work = currentWork(session).find(w => w.attempt.nodeId === nodeId);
   if (!work) return null;
   const action = [...(session.activities ?? [])].reverse().find(x => x.attemptId === work.attempt.id && x.kind === 'action');
-  return <div className="callout live" style={{ '--agent': `var(--agent-${work.attempt.agentId})` } as React.CSSProperties}>
+  return <div className="callout live" style={{ '--agent': agentColor(session, work.attempt.agentId) } as React.CSSProperties}>
     <p><Avatar session={session} agentId={work.attempt.agentId} /> <strong>{work.agent?.name ?? work.attempt.agentId}</strong> · {new Date(work.attempt.startedAt).toLocaleTimeString()} 开始</p>
     <p>{action?.summary ?? '已领取，等待上报实际动作'}</p>{action?.target && <p className="mono">{action.target}</p>}
   </div>;

@@ -1,6 +1,6 @@
 import React, { useMemo, type ReactNode } from 'react';
 import type { Session } from '../mcp/schema';
-import { ACCEPT_ID, aggregateStatus, buildView, counts, stateLabel, type ViewNode } from './canvas-model';
+import { ACCEPT_ID, agentColor, aggregateStatus, buildView, counts, stateLabel, type ViewNode } from './canvas-model';
 import { currentWork } from './collaboration-model';
 import { Avatar, Glyph, MiniBar } from './TreeCanvas';
 import './overview.css';
@@ -49,7 +49,7 @@ export function Overview({ session, onExpand, taskActions }: { session: Session;
           const v = view.get(id)!, c = counts(session, view, id), status = aggregateStatus(session, view, id);
           const live = work.find(w => id === w.attempt.nodeId || view.get(w.attempt.nodeId)?.parentId === id || session.nodes.find(n => n.id === w.attempt.nodeId)?.parentId === id);
           return <button type="button" key={id} className="overview-chip" data-node={id} data-state={status} data-kind={v.kind}
-            style={live ? { '--agent': `var(--agent-${live.attempt.agentId})` } as React.CSSProperties : undefined}
+            style={live ? { '--agent': agentColor(session, live.attempt.agentId) } as React.CSSProperties : undefined}
             title={`${v.title}：${stateLabel(session, view, id)}`} onClick={() => onExpand(id)}>
             <Glyph session={session} view={view} id={id} size={14} /><span className="t">{v.title}</span>
             {v.kind === 'accept' ? <span className="n">{stateLabel(session, view, id)}</span> : c.total > 0 && <span className="n">{c.passed}/{c.total}</span>}
@@ -58,7 +58,7 @@ export function Overview({ session, onExpand, taskActions }: { session: Session;
       </li>)}
     </ol>
     <div className="overview-live">
-      {work.slice(0, 2).map(w => <span key={w.attempt.id} className="overview-doing" style={{ '--agent': `var(--agent-${w.attempt.agentId})` } as React.CSSProperties}>
+      {work.slice(0, 2).map(w => <span key={w.attempt.id} className="overview-doing" style={{ '--agent': agentColor(session, w.attempt.agentId) } as React.CSSProperties}>
         <Avatar session={session} agentId={w.attempt.agentId} /><strong>{w.agent?.name ?? w.attempt.agentId}</strong>
         <span>{action(w) ?? '已领取'}</span><button type="button" className="link" onClick={() => onExpand(w.attempt.nodeId)}>{session.nodes.find(n => n.id === w.attempt.nodeId)?.title}</button>
       </span>)}

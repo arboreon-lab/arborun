@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import type { AttemptView, NodeState, Session } from '../src/mcp/schema';
 import {
-  ACCEPT_ID, activeAttempts, applyOffsets, buildView, counts, fitCamera, initialExpanded, layoutTree, stateLabel, visibleCard, workId, zoomCamera, ZOOM_MAX, ZOOM_MIN, type TreeView,
+  ACCEPT_ID, activeAttempts, agentColor, agentProgress, applyOffsets, buildView, counts, fitCamera, initialExpanded, layoutTree, stateLabel, visibleCard, workId, zoomCamera, ZOOM_MAX, ZOOM_MIN, type TreeView,
 } from '../src/mcp-ui/canvas-model';
 
 const node = (id: string, parentId: string | null, kind: NodeState['kind'] = 'action', overrides: Partial<NodeState> = {}): NodeState => ({
@@ -102,5 +102,18 @@ describe('view-only geometry', () => {
     const tree = buildView(session(plan())), layout = layoutTree(tree, 'root', 'tb', initialExpanded(tree, 'root'));
     expect(fitCamera(layout, 400, 300, true).zoom).toBeLessThan(.8);
     expect(fitCamera(layout, 400, 300).zoom).toBeGreaterThanOrEqual(.8);
+  });
+
+  test('each agent owns its share of a node and inks it as its steps and tests pass', () => {
+    const nodes = plan().map(n => ({ ...n, ...(n.id === 'w1' ? { agentId: 'export', status: 'passed' as const } : {}), ...(n.id === 't2' ? { agentId: 'compat', status: 'running' as const, attemptId: 'a-t2' } : {}), ...(n.id === 't1' ? { agentId: 'compat', status: 'passed' as const } : {}) }));
+    const s = session(nodes, [attempt('a-t2', 't2', { agentId: 'compat' })]);
+    const view = buildView(s);
+    expect(agentProgress(s, view, 'r1')).toEqual([{ agentId: 'compat', total: 2, done: 1, running: 1 }, { agentId: 'export', total: 1, done: 1, running: 0 }]);
+    expect(agentProgress(s, view, 't2')).toEqual([{ agentId: 'compat', total: 1, done: 0, running: 1 }]);
+    expect(agentProgress(s, view, ACCEPT_ID)).toEqual([]);
+    // Colours follow the order agents appear in, so the same agent keeps one colour everywhere.
+    expect(agentColor(s, 'main')).toBe('var(--agent-0)');
+    expect(agentColor(s, 'compat')).toBe('var(--agent-1)');
+    expect(agentColor(s, 'export')).toBe('var(--agent-2)');
   });
 });

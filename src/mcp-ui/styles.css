@@ -5,7 +5,7 @@
   --ink: #efe7d4; --ink-2: #cfc7b3; --muted: #9a937f; --faint: #5d584c;
   --line: #3a372f; --line-strong: #6b6555; --dot: #26241f;
   --pass: #a7c48f; --pass-soft: rgba(167, 196, 143, .10); --fail: #ec8a6f; --fail-soft: rgba(236, 138, 111, .11); --wait: #e3b55a; --wait-soft: rgba(227, 181, 90, .11);
-  --agent-main: #c3b3f2; --agent-export: #8fd3cc; --agent-compat: #eea8cf; --agent-other: #e8c48f;
+  --agent-0: #b9a6f5; --agent-1: #79d3c8; --agent-2: #f29bc6; --agent-3: #e9c27a; --agent-4: #8ec1f2; --agent-5: #c9d98a;
   --hand: 'LXGW WenKai Lite', 'LXGW WenKai', 'Kaiti SC', 'STKaiti', 'KaiTi', serif;
   --mono: 'SF Mono', ui-monospace, Menlo, 'LXGW WenKai Lite', monospace;
   --wobble: 14px 4px 12px 5px / 5px 12px 4px 14px; --wobble-2: 5px 13px 6px 12px / 12px 5px 13px 6px;

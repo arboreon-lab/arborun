@@ -8,7 +8,10 @@ import type { AttemptView, NodeState, Session } from '../mcp/schema';
  */
 export type TreeView = 'tb' | 'lr';
 export type ChildMode = 'seq' | 'par' | 'set';
-export const CARD_W = 212, CARD_H = 110, FRAME_HEAD = 36, FRAME_PAD = 12;
+/** Nodes are circles; layout still works on their square bounding box, so every side midpoint lies on the circle. */
+export const NODE_D = 184, CARD_W = NODE_D, CARD_H = NODE_D, FRAME_HEAD = 36, FRAME_PAD = 16;
+/** Room outside the circle for the agents' progress ring. */
+export const RING_GAP = 7, RING_W = 4.6;
 export const ACCEPT_ID = '__accept';
 export const workId = (resultId: string) => `${resultId}::work`;
 
@@ -100,6 +103,35 @@ export function viewDescendants(view: Map<string, ViewNode>, id: string): string
   walk(id); return out;
 }
 
+/** Each agent keeps its own colour for the whole session, in the order agents were declared or first seen. */
+export const AGENT_COLORS = 6;
+export function agentColor(session: Pick<Session, 'agents' | 'nodes' | 'attempts'>, agentId?: string) {
+  const ids = [...new Set([...session.agents.map(a => a.id), ...session.nodes.map(n => n.agentId), ...session.attempts.map(a => a.agentId)])];
+  const i = agentId ? ids.indexOf(agentId) : -1;
+  return `var(--agent-${i < 0 ? AGENT_COLORS - 1 : i % AGENT_COLORS})`;
+}
+
+/** One agent's share of a node: the steps and tests it owns below (or at) the node, and how many have passed. */
+export interface AgentProgress { agentId: string; total: number; done: number; running: number }
+export function agentProgress(session: Session, view: Map<string, ViewNode>, id: string): AgentProgress[] {
+  // Acceptance is the person's step, so it carries no agent ring.
+  if (!view.has(id) || id === ACCEPT_ID) return [];
+  const ids = new Set([id, ...viewDescendants(view, id)]);
+  const live = new Map(activeAttempts(session).map(a => [a.nodeId, a.agentId]));
+  const out = new Map<string, AgentProgress>();
+  for (const n of session.nodes) {
+    if (!ids.has(n.id) || isContainer(n) || n.parentId === null || n.status === 'skipped') continue;
+    const agentId = live.get(n.id) ?? n.agentId;
+    const p = out.get(agentId) ?? { agentId, total: 0, done: 0, running: 0 };
+    p.total++;
+    if (n.status === 'passed') p.done++;
+    if (live.has(n.id)) p.running++;
+    out.set(agentId, p);
+  }
+  const order = [...new Set([...session.agents.map(a => a.id), ...out.keys()])];
+  return order.filter(a => out.has(a)).map(a => out.get(a)!);
+}
+
 /** Progress counts tests: that is what the person accepts. Work and plain groups fall back to steps. */
 export function counts(session: Session, view: Map<string, ViewNode>, id: string): Counts {
   const ids = new Set(id === ACCEPT_ID ? session.nodes.map(n => n.id) : viewDescendants(view, id));
@@ -157,7 +189,7 @@ export function visibleCard(view: Map<string, ViewNode>, pos: Map<string, Point>
 export function layoutTree(view: Map<string, ViewNode>, scope: string, treeView: TreeView, expanded: ReadonlySet<string>): TreeLayout {
   const tb = treeView === 'tb', W = CARD_W, H = CARD_H;
   const su = tb ? H : W, sv = tb ? W : H;
-  const GV = tb ? 40 : 26, GU = tb ? 26 : 34, TRUNK_GAP = tb ? 44 : 60, SIDE = tb ? 64 : 48;
+  const GV = tb ? 44 : 34, GU = tb ? 34 : 44, TRUNK_GAP = tb ? 52 : 64, SIDE = tb ? 66 : 56;
   const HU = tb ? FRAME_HEAD : 0, HV = tb ? 0 : FRAME_HEAD;
   type UV = { u: number; v: number };
   const cards = new Map<string, UV>(), frames: { id: string; u: number; v: number; du: number; dv: number }[] = [], lines: { pts: UV[]; from: string; to: string; trunk?: boolean }[] = [];
