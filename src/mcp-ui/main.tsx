@@ -19,10 +19,11 @@ function placeFor(id: string): SheetPlace {
   const area = document.querySelector('.workspace-area')?.getBoundingClientRect();
   const node = document.querySelector(`[data-node-id="${CSS.escape(id)}"]`)?.getBoundingClientRect();
   if (!area) return { top: false, height: 320 };
-  const head = 56, max = (area.height - head) * .5;
+  // Top bar (52px) plus the sheet's 12px inset.
+  const head = 64, max = (area.height - head) * .5;
   if (!node) return { top: false, height: Math.round(Math.max(240, max)) };
   const top = (node.top + node.bottom) / 2 > area.top + area.height / 2;
-  const free = top ? node.top - area.top - head : area.bottom - node.bottom;
+  const free = top ? node.top - area.top - head : area.bottom - node.bottom - 12;
   return { top, height: Math.round(Math.max(240, Math.min(max, free - 10))) };
 }
 const loadArtifact = (id: string) => bridge.artifact(id);

@@ -18,7 +18,7 @@
       "用 Arborun 打开当前任务的执行树。",
       "按 Arborun 执行树继续执行，并在完成后提交验收。"
     ],
-    "brandColor": "#0d0d0b",
+    "brandColor": "#c96442",
     "composerIcon": "./assets/logo.png",
     "logo": "./assets/logo.png"
   }

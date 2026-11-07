@@ -246,6 +246,19 @@ function Describe({ node, view, onLocate, fallback }: { node: NodeState; view: M
 const Outcome = ({ node }: { node: NodeState }) => node.result ? <Section><div className={`callout ${node.status === 'failed' ? 'fail' : node.status === 'passed' ? 'pass' : ''}`}><p>{node.result}</p></div></Section> : null;
 
 const effortNames = { low: '低', medium: '中', high: '高', xhigh: '很高' } as const;
+/** Offered in the model picker; anything else can be typed under 自定义. Hosts apply what they support. */
+const KNOWN_MODELS = ['claude-fable-5-1', 'claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5'];
+/** A real dropdown of models (default, known ones, the ones in use) plus 自定义 for any other name. */
+function ModelPicker({ value, known, onChange }: { value?: string; known: string[]; onChange: (model?: string) => void }) {
+  const [custom, setCustom] = useState(Boolean(value && !known.includes(value)));
+  const id = useId();
+  return <label htmlFor={id}>模型{custom
+    ? <span className="model-custom"><input id={id} value={value ?? ''} placeholder="输入模型名称" maxLength={100} autoFocus onChange={e => onChange(e.target.value || undefined)} />
+        <button type="button" className="icon-btn" aria-label="从列表选择" title="从列表选择" onClick={() => { setCustom(false); if (value && !known.includes(value)) onChange(undefined); }}>×</button></span>
+    : <select id={id} value={value ?? ''} onChange={e => { if (e.target.value === '__custom') { setCustom(true); onChange(undefined); } else onChange(e.target.value || undefined); }}>
+        <option value="">默认</option>{known.map(m => <option key={m} value={m}>{m}</option>)}<option value="__custom">自定义…</option>
+      </select>}</label>;
+}
 const modeNames = { readonly: '只读', ask: '改动前先问', auto: '自动执行' } as const;
 /**
  * Who does what, and with which model, effort and mode. The planning agent sets them by how hard the work is; the person
@@ -255,6 +268,7 @@ function Agents({ session, busy, onSave, ids, title = 'Agent 分工与模型' }:
   const [draft, setDraft] = useState<AgentSpec[] | null>(null);
   const [error, setError] = useState('');
   const shown = (draft ?? session.agents).filter(a => !ids || ids.includes(a.id));
+  const models = [...new Set([...KNOWN_MODELS, ...session.agents.map(a => a.model).filter((m): m is string => Boolean(m))])];
   if (!shown.length) return null;
   const set = (id: string, patch: Partial<AgentSpec>) => setDraft(d => d!.map(a => a.id === id ? { ...a, ...patch } : a));
   const save = async () => {
@@ -266,13 +280,12 @@ function Agents({ session, busy, onSave, ids, title = 'Agent 分工与模型' }:
     <ul className="agents">{shown.map(a => <li key={a.id} data-agent-id={a.id}><Avatar session={session} agentId={a.id} /><div>
       <strong>{a.name}</strong> · {a.role}
       {draft ? <div className="agent-config edit">
-        <label>模型<input value={a.model ?? ''} placeholder="沿用默认" maxLength={100} list="arborun-models" onChange={e => set(a.id, { model: e.target.value })} /></label>
+        <ModelPicker value={a.model} known={models} onChange={model => set(a.id, { model })} />
         <label>思考力度<select value={a.effort ?? ''} onChange={e => set(a.id, { effort: (e.target.value || undefined) as AgentSpec['effort'] })}><option value="">默认</option>{Object.entries(effortNames).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
         <label>方式<select value={a.mode ?? ''} onChange={e => set(a.id, { mode: (e.target.value || undefined) as AgentSpec['mode'] })}><option value="">默认</option>{Object.entries(modeNames).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
       </div> : <p className="agent-config">{[a.model ?? '默认模型', a.effort ? `思考${effortNames[a.effort]}` : '默认力度', a.mode ? modeNames[a.mode] : '默认方式'].map((t, i) => <span key={i} className="chip-flat">{t}</span>)}</p>}
       {a.reason && <p className="note">{a.reason}</p>}
       {!ids && <><p>负责：{a.scope}</p><p>上限：{a.budget}</p></>}</div></li>)}</ul>
-    <datalist id="arborun-models">{[...new Set(session.agents.map(a => a.model).filter(Boolean))].map(m => <option key={m} value={m} />)}</datalist>
     {onSave && (draft
       ? <><p className="note">保存后生成新版本，需要重新批准；宿主支持时，Agent 按这里的模型和力度执行。</p>{error && <p role="alert" className="callout fail">{error}</p>}
           <div className="row"><button type="button" className="btn" disabled={busy} onClick={() => setDraft(null)}>取消</button><button type="button" className="btn primary" disabled={busy} onClick={() => void save()}>保存为 v{session.revision + 1}</button></div></>

@@ -1,80 +1,42 @@
-import rough from 'roughjs';
-import type { Drawable } from 'roughjs/bin/core';
 import type { NodeState } from '../mcp/schema';
 import { NODE_D, RING_GAP, RING_W, type Point } from './canvas-model';
 
-/** Hand-drawn strokes as SVG path markup. Every element has a fixed seed so its lines stay put between renders. */
-const gen = rough.generator();
-export const seedOf = (value: string) => { let h = 7; for (const c of value) h = (h * 31 + c.charCodeAt(0)) >>> 0; return (h % 2147483646) + 1; };
-export const draw = (...drawables: (Drawable | Drawable[])[]) => drawables.flat().map(d => gen.toPaths(d).map(p =>
-  `<path d="${p.d}" style="stroke:${p.stroke};stroke-width:${p.strokeWidth};fill:${p.fill || 'none'}"/>`).join('')).join('');
-const pt = (p: Point): [number, number] => [p.x, p.y];
-
-export type GlyphKind = 'start' | 'accept' | 'result' | 'other';
-export function glyphMarkup(id: string, kind: GlyphKind, status: NodeState['status'], options: { agentColor?: string; ready?: boolean; accepted?: boolean; approved?: boolean } = {}) {
-  const seed = seedOf(id);
-  const o = (stroke: string, x: object = {}) => ({ stroke, strokeWidth: 1.4, roughness: .8, bowing: .6, seed, ...x });
-  const solid = (c: string) => o(c, { fill: c, fillStyle: 'solid' });
-  const shape = (x: object) => kind === 'result' ? gen.polygon([[8, 1], [15, 8], [8, 15], [1, 8]], x) : gen.circle(8, 8, 13.4, x);
-  const mark = (pts: [number, number][], c = 'var(--bg)', w = 1.8) => gen.linearPath(pts, { stroke: c, strokeWidth: w, roughness: .4, seed });
-  if (kind === 'start') return draw(gen.circle(8, 8, 13.4, solid(options.approved ? 'var(--ink)' : 'var(--line-strong)')), gen.polygon([[6.4, 4.9], [11.1, 8], [6.4, 11.1]], { stroke: 'var(--bg)', fill: 'var(--bg)', fillStyle: 'solid', roughness: .3, seed }));
-  if (kind === 'accept') { const c = options.ready ? 'var(--ink)' : 'var(--faint)'; return draw(gen.circle(8, 8, 13.4, o(c)), gen.circle(8, 8, 5.4, solid(options.accepted ? 'var(--pass)' : c))); }
-  if (status === 'passed') return draw(shape(solid('var(--pass)')), mark([[4.8, 8.4], [7.1, 10.7], [11.4, 5.4]]));
-  if (status === 'failed') return draw(shape(solid('var(--fail)')), mark([[5.6, 5.6], [10.4, 10.4]]), mark([[10.4, 5.6], [5.6, 10.4]]));
-  if (status === 'blocked') return draw(shape(solid('var(--wait)')), mark([[8, 4.4], [8, 8.8]]), mark([[8, 11.2], [8.1, 11.6]], 'var(--bg)', 2.2));
-  if (status === 'stale') return draw(shape(o('var(--wait)', { strokeLineDash: [2.4, 2] })), gen.arc(8, 8, 6.4, 6.4, -.4, 4.4, false, o('var(--wait)', { roughness: .4 })));
-  if (status === 'skipped') return draw(shape(o('var(--faint)', { strokeLineDash: [2.2, 2] })), mark([[5, 11], [11, 5]], 'var(--faint)', 1.4));
-  // Running: the agent's colour with a filled play mark. Waiting (ready or not yet approved): a clock face.
-  if (status === 'running') { const c = options.agentColor ?? 'var(--ink)'; return draw(shape(o(c, { strokeWidth: 1.8 })), gen.polygon([[6.3, 4.9], [11.3, 8], [6.3, 11.1]], { stroke: c, fill: c, fillStyle: 'solid', roughness: .3, seed })); }
-  const c = status === 'ready' ? 'var(--ink-2)' : 'var(--faint)';
-  return draw(gen.circle(8, 8, 13.4, o(c)), gen.linearPath([[8, 4.3], [8, 8.3], [10.9, 9.9]], { stroke: c, strokeWidth: 1.5, roughness: .4, seed }));
-}
-
-export interface CardLook { color: string; width: number; dashed?: boolean; stacked?: boolean; hatch?: boolean; selected?: boolean; live?: boolean }
-/** Space around the circle inside the node's sketch box: outline wobble plus the progress ring. */
+/** Clean vector marks for the canvas: status icons, edges, message arcs and the agents' progress ring. */
 export const SKETCH_M = 16;
 const C = SKETCH_M + NODE_D / 2;
-/** Node outline: a hand-drawn circle in a (D+2M)² box. `frame` varies the seed so running nodes "boil". */
-export function cardMarkup(id: string, look: CardLook, frame = 0) {
-  const seed = seedOf(id) + frame * 97, D = NODE_D;
-  const base = { stroke: look.color, strokeWidth: look.width, roughness: 1.1, bowing: 1, seed, ...(look.dashed ? { strokeLineDash: [6, 6] } : {}) };
-  let out = '';
-  // A folded node shows one faint shadow behind it: there is more inside.
-  if (look.stacked) out += draw(gen.circle(C + 6, C + 5, D, { ...base, stroke: 'var(--line)', strokeWidth: 1.1, disableMultiStroke: true, roughness: .8, seed: seed + 1 }));
-  if (look.hatch) out += `<g opacity=".2">${draw(gen.circle(C, C, D - 8, { stroke: 'none', fill: look.color, fillStyle: 'hachure', hachureGap: 10, hachureAngle: -41, fillWeight: .8, roughness: 1.2, seed }))}</g>`;
-  out += draw(gen.circle(C, C, D, { ...base, disableMultiStroke: true, roughness: .9 }));
-  if (look.selected) out += draw(gen.circle(C, C, D - 7, { ...base, strokeWidth: 1, seed: seed + 5, roughness: 1.5 }));
-  return out;
+const f = (n: number) => +n.toFixed(2);
+
+export type GlyphKind = 'start' | 'accept' | 'result' | 'other';
+/** A 16×16 status icon: done, failed, needs attention, running (in the agent's colour), waiting, redo or not applicable. */
+export function glyphMarkup(kind: GlyphKind, status: NodeState['status'], options: { agentColor?: string; ready?: boolean; accepted?: boolean; approved?: boolean } = {}) {
+  const disc = (fill: string, mark: string) => `<circle cx="8" cy="8" r="7" style="fill:${fill}"/><path d="${mark}" style="fill:none;stroke:var(--on-status);stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round"/>`;
+  const ring = (stroke: string, extra = '') => `<circle cx="8" cy="8" r="6.4" style="fill:none;stroke:${stroke};stroke-width:1.4${extra}"/>`;
+  if (kind === 'start') return `<circle cx="8" cy="8" r="7" style="fill:${options.approved ? 'var(--ink)' : 'var(--faint)'}"/><path d="M6.5 5.2v5.6L11 8z" style="fill:var(--bg)"/>`;
+  if (kind === 'accept') return ring(options.ready ? 'var(--ink)' : 'var(--faint)') + `<circle cx="8" cy="8" r="3" style="fill:${options.accepted ? 'var(--pass)' : options.ready ? 'var(--ink)' : 'var(--faint)'}"/>`;
+  if (status === 'passed') return disc('var(--pass)', 'M4.9 8.3 7 10.4l4.2-4.6');
+  if (status === 'failed') return disc('var(--fail)', 'M5.7 5.7l4.6 4.6M10.3 5.7l-4.6 4.6');
+  if (status === 'blocked') return disc('var(--wait)', 'M8 4.6v4.2M8 11.3v.1');
+  if (status === 'running') { const c = options.agentColor ?? 'var(--accent)'; return ring(c) + `<circle cx="8" cy="8" r="3" style="fill:${c}"/>`; }
+  if (status === 'stale') return ring('var(--wait)', ';stroke-dasharray:2.4 2') + `<path d="M8 5v3l2 1.2" style="fill:none;stroke:var(--wait);stroke-width:1.4;stroke-linecap:round"/>`;
+  if (status === 'skipped') return ring('var(--faint)') + `<path d="M5.4 10.6l5.2-5.2" style="stroke:var(--faint);stroke-width:1.4;stroke-linecap:round"/>`;
+  const c = status === 'ready' ? 'var(--muted)' : 'var(--faint)';
+  return ring(c) + `<path d="M8 5v3.2l2.1 1.2" style="fill:none;stroke:${c};stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round"/>`;
 }
 
-/** One agent's arc of the progress ring: its share of the circle, how much of that share is done, and whether it is working now. */
-export interface RingSegment { agentId: string; color: string; share: number; done: number; running: boolean }
-/**
- * Progress as one clean stroke around the node: each agent owns a part of the circle in its own colour and fills it
- * clockwise from the top as its steps and tests pass. Nothing is drawn for work not yet done; an agent working now
- * shows a softly breathing arc (a short stub when it has not finished anything yet).
- */
-export function ringMarkup(_id: string, segments: RingSegment[]) {
-  const r = NODE_D / 2 + RING_GAP, gap = segments.length > 1 ? .14 : 0;
-  const point = (a: number) => `${(C + r * Math.cos(a)).toFixed(2)} ${(C + r * Math.sin(a)).toFixed(2)}`;
-  const arc = (from: number, to: number) => to - from >= Math.PI * 2 - .001
-    ? `M ${point(from)} A ${r} ${r} 0 1 1 ${point(from + Math.PI)} A ${r} ${r} 0 1 1 ${point(from)}`
-    : `M ${point(from)} A ${r} ${r} 0 ${to - from > Math.PI ? 1 : 0} 1 ${point(to)}`;
-  let a = -Math.PI / 2, out = '';
-  for (const s of segments) {
-    const span = Math.PI * 2 * s.share - gap, drawn = Math.max(span * Math.min(1, s.done), s.running ? Math.min(.22, span) : 0);
-    if (drawn > .01) out += `<path class="ring-arc${s.running ? ' live' : ''}" data-agent="${s.agentId}" d="${arc(a + gap / 2, a + gap / 2 + drawn)}" style="stroke:${s.color};stroke-width:${RING_W}"/>`;
-    a += span + gap;
+/** A polyline with softly rounded corners and a small arrowhead at its end. */
+export function edgeMarkup(pts: Point[], color: string, width: number, dashed = false) {
+  const r = 10;
+  let d = `M${f(pts[0].x)} ${f(pts[0].y)}`;
+  for (let i = 1; i < pts.length - 1; i++) {
+    const a = pts[i - 1], b = pts[i], c = pts[i + 1];
+    const la = Math.hypot(b.x - a.x, b.y - a.y) || 1, lc = Math.hypot(c.x - b.x, c.y - b.y) || 1, k = Math.min(r, la / 2, lc / 2);
+    d += ` L${f(b.x - (b.x - a.x) / la * k)} ${f(b.y - (b.y - a.y) / la * k)} Q${f(b.x)} ${f(b.y)} ${f(b.x + (c.x - b.x) / lc * k)} ${f(b.y + (c.y - b.y) / lc * k)}`;
   }
-  return out;
-}
-export function frameMarkup(id: string, w: number, h: number, color: string, solid: boolean) {
-  return draw(gen.rectangle(6, 6, w, h, { stroke: color, strokeWidth: solid ? 1.4 : 1.1, roughness: 1.4, bowing: 2, seed: seedOf(`frame:${id}`), ...(solid ? {} : { strokeLineDash: [10, 7] }) }));
-}
-export function edgeMarkup(pts: Point[], key: string, color: string, width: number, dashed = false) {
-  const z = pts[pts.length - 1], y = pts[pts.length - 2], ang = Math.atan2(z.y - y.y, z.x - y.x), seed = seedOf(key);
-  const head: [number, number][] = [[z.x - 8 * Math.cos(ang - .5), z.y - 8 * Math.sin(ang - .5)], [z.x, z.y], [z.x - 8 * Math.cos(ang + .5), z.y - 8 * Math.sin(ang + .5)]];
-  return draw(gen.linearPath(pts.map(pt), { stroke: color, strokeWidth: width, roughness: .75, bowing: 1.4, seed, ...(dashed ? { strokeLineDash: [5, 6] } : {}) }), gen.linearPath(head, { stroke: color, strokeWidth: Math.min(width, 1.6), roughness: .4, seed }));
+  const z = pts[pts.length - 1], y = pts[pts.length - 2], ang = Math.atan2(z.y - y.y, z.x - y.x);
+  d += ` L${f(z.x)} ${f(z.y)}`;
+  const head = `M${f(z.x - 6 * Math.cos(ang - .5))} ${f(z.y - 6 * Math.sin(ang - .5))} L${f(z.x)} ${f(z.y)} L${f(z.x - 6 * Math.cos(ang + .5))} ${f(z.y - 6 * Math.sin(ang + .5))}`;
+  const style = `fill:none;stroke:${color};stroke-width:${width};stroke-linecap:round;stroke-linejoin:round`;
+  return `<path d="${d}" style="${style}${dashed ? ';stroke-dasharray:4 5' : ''}"/><path d="${head}" style="${style}"/>`;
 }
 
 const border = (a: Point, b: Point) => {
@@ -88,9 +50,32 @@ export function messageCurve(a: Point, b: Point, lane: number): Curve {
   return [p.x, p.y, mx + nx * bulge, my + ny * bulge, mx + nx * bulge, my + ny * bulge, q.x, q.y];
 }
 export const bez = (d: Curve, t: number): Point => { const u = 1 - t; return { x: u * u * u * d[0] + 3 * u * u * t * d[2] + 3 * u * t * t * d[4] + t * t * t * d[6], y: u * u * u * d[1] + 3 * u * u * t * d[3] + 3 * u * t * t * d[5] + t * t * t * d[7] }; };
-export function messageMarkup(d: Curve, key: string, color: string, received: boolean) {
-  const e = bez(d, 1), near = bez(d, .96), ang = Math.atan2(e.y - near.y, e.x - near.x), seed = seedOf(key);
-  const samples = Array.from({ length: 13 }, (_, k) => pt(bez(d, k / 12)));
-  return draw(gen.curve(samples, { stroke: color, strokeWidth: 1.6, roughness: .9, seed, ...(received ? {} : { strokeLineDash: [7, 6] }) }),
-    gen.linearPath([[e.x - 9 * Math.cos(ang - .5), e.y - 9 * Math.sin(ang - .5)], [e.x, e.y], [e.x - 9 * Math.cos(ang + .5), e.y - 9 * Math.sin(ang + .5)]], { stroke: color, strokeWidth: 1.6, roughness: .4, seed }));
+/** A message between agents: a smooth arc in the sender's colour, dashed until it is received. */
+export function messageMarkup(d: Curve, color: string, received: boolean) {
+  const e = bez(d, 1), near = bez(d, .96), ang = Math.atan2(e.y - near.y, e.x - near.x);
+  const style = `fill:none;stroke:${color};stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round`;
+  return `<path d="M${f(d[0])} ${f(d[1])} C${f(d[2])} ${f(d[3])} ${f(d[4])} ${f(d[5])} ${f(d[6])} ${f(d[7])}" style="${style}${received ? '' : ';stroke-dasharray:6 5'}"/>`
+    + `<path d="M${f(e.x - 7 * Math.cos(ang - .5))} ${f(e.y - 7 * Math.sin(ang - .5))} L${f(e.x)} ${f(e.y)} L${f(e.x - 7 * Math.cos(ang + .5))} ${f(e.y - 7 * Math.sin(ang + .5))}" style="${style}"/>`;
+}
+
+/** One agent's arc of the progress ring: its share of the circle, how much of that share is done, and whether it is working now. */
+export interface RingSegment { agentId: string; color: string; share: number; done: number; running: boolean }
+/**
+ * Progress as one clean stroke around the node: each agent owns a part of the circle in its own colour and fills it
+ * clockwise from the top as its steps and tests pass. Nothing is drawn for work not yet done; an agent working now
+ * shows a softly breathing arc (a short stub when it has not finished anything yet).
+ */
+export function ringMarkup(segments: RingSegment[]) {
+  const r = NODE_D / 2 + RING_GAP, gap = segments.length > 1 ? .14 : 0;
+  const point = (a: number) => `${f(C + r * Math.cos(a))} ${f(C + r * Math.sin(a))}`;
+  const arc = (from: number, to: number) => to - from >= Math.PI * 2 - .001
+    ? `M ${point(from)} A ${r} ${r} 0 1 1 ${point(from + Math.PI)} A ${r} ${r} 0 1 1 ${point(from)}`
+    : `M ${point(from)} A ${r} ${r} 0 ${to - from > Math.PI ? 1 : 0} 1 ${point(to)}`;
+  let a = -Math.PI / 2, out = '';
+  for (const s of segments) {
+    const span = Math.PI * 2 * s.share - gap, drawn = Math.max(span * Math.min(1, s.done), s.running ? Math.min(.22, span) : 0);
+    if (drawn > .01) out += `<path class="ring-arc${s.running ? ' live' : ''}" data-agent="${s.agentId}" d="${arc(a + gap / 2, a + gap / 2 + drawn)}" style="stroke:${s.color};stroke-width:${RING_W}"/>`;
+    a += span + gap;
+  }
+  return out;
 }

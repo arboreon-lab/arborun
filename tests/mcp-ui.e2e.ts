@@ -325,8 +325,14 @@ test('长任务：节点完成后，测试里每个样例显示实际结果与�
   await page.screenshot({ path: test.info().outputPath('reference-task-sheet.png') });
   await taskPanel(page).getByRole('button', { name: '调整模型与力度', exact: true }).click();
   await taskPanel(page).locator('[data-agent-id="data"]').getByLabel('思考力度').selectOption('medium');
+  // The model is a real dropdown: switch to another known model, or type any name under 自定义.
+  await taskPanel(page).locator('[data-agent-id="train"]').getByLabel('模型').selectOption('claude-sonnet-5-5');
+  await taskPanel(page).locator('[data-agent-id="demo"]').getByLabel('模型').selectOption('__custom');
+  await taskPanel(page).locator('[data-agent-id="demo"]').getByPlaceholder('输入模型名称').fill('my-local-model');
   await taskPanel(page).getByRole('button', { name: '保存为 v2', exact: true }).click();
   await expect.poll(async () => (await current()).agents.find(a => a.id === 'data')?.effort).toBe('medium');
+  expect((await current()).agents.find(a => a.id === 'train')?.model).toBe('claude-sonnet-5-5');
+  expect((await current()).agents.find(a => a.id === 'demo')?.model).toBe('my-local-model');
   expect((await current()).revision).toBe(2);
   await taskPanel(page).getByRole('button', { name: '批准 v2 并执行', exact: true }).click();
   await expect(taskPanel(page).getByRole('button', { name: '暂停执行', exact: true })).toBeVisible();

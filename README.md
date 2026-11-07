@@ -17,7 +17,7 @@ Arborun
 │  ├─ 效果（kind=result）下并排列出测试；Agent 的实现步骤默认收起为“Agent 工作”。
 │  ├─ 测试标明“你设定”或“Agent 补充”；用户设定的测试不能被 Agent 更新修改或删除。
 │  ├─ 进度按测试计数；失败测试在预算内由 Agent 自动修复，界面说明无需用户处理。
-│  ├─ 黑底、米白手绘线条与手写字体；字体子集与 rough.js 均内联，不访问外部资源。
+│  ├─ Claude 风格：暖中性底色、陶土色强调、细线与柔和阴影；浅色／深色跟随宿主或系统；不访问外部资源。
 │  ├─ 无限画布：6%–800% 缩放，远景只显示标题；单击详情，双击进入任意节点。
 │  ├─ 卡片可拖动，只改布局不改关系；悬停高亮从主干起点到该节点的路径。
 │  ├─ 每个节点的详情在右侧栏按四部分显示：输入、输出、描述、测试。
@@ -62,7 +62,7 @@ Arborun
 │  │  └─ codex plugin marketplace add arboreon-lab/arborun && codex plugin add arborun@arborun
 │  ├─ 插件包：plugins/arborun；构建命令会复制完整运行文件，构建产物随仓库提交。
 │  ├─ Codex 清单：plugins/arborun/.codex-plugin/plugin.json（显示名、简介、图标、示例提示）。
-│  │  └─ 图标：plugins/arborun/assets/logo.png，由 scripts/build-plugin-icon.mjs 以手绘风格生成。
+│  │  └─ 图标：plugins/arborun/assets/logo.png，由 scripts/build-plugin-icon.mjs 生成（陶土色底、象牙色树形）。
 │  ├─ 本地开发：codex plugin marketplace add /absolute/path/to/arborun，再 codex plugin add arborun@arborun
 │  ├─ 按宿主要求刷新／重启后，在会话中启用 Arborun。
 │  ├─ 用法：使用 Arborun，把这个任务先规划为可编辑执行树，等我批准再执行。

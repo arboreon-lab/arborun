@@ -1,23 +1,21 @@
-// Draws the plugin icon in the product's look: black ground, off-white hand-drawn tree
-// (start, trunk, results branching to the side, acceptance at the end). Output: SVG + 512px PNG.
-import rough from 'roughjs';
+// Draws the plugin icon in the product's look: a clay tile with a clean ivory tree
+// (a trunk of stages with results branching to the side, the last one still open). Output: SVG + 512px PNG.
 import { writeFile } from 'node:fs/promises';
 import { chromium } from '@playwright/test';
 
-const gen = rough.generator(), ink = '#efe7d4', bg = '#0d0d0b', seed = 7;
-const paths = d => gen.toPaths(d).map(p => `<path d="${p.d}" stroke="${p.stroke}" stroke-width="${p.strokeWidth}" fill="${p.fill || 'none'}" stroke-linecap="round" stroke-linejoin="round"/>`).join('');
-const line = (pts, w = 34, s = seed) => paths(gen.linearPath(pts, { stroke: ink, strokeWidth: w, roughness: 1.1, bowing: 1.4, seed: s }));
-const dot = (x, y, r, s, solid = true) => paths(gen.circle(x, y, r * 2, { stroke: ink, strokeWidth: 26, roughness: .9, seed: s, ...(solid ? { fill: ink, fillStyle: 'solid' } : {}) }));
+const clay = '#c96442', ivory = '#faf9f5';
+const stroke = `stroke="${ivory}" stroke-width="34" stroke-linecap="round" stroke-linejoin="round" fill="none"`;
 const body = [
-  paths(gen.rectangle(40, 40, 944, 944, { stroke: 'none', fill: bg, fillStyle: 'solid', roughness: 0, seed })),
-  line([[380, 250], [380, 780]], 36, 11),                                   // trunk
-  line([[380, 470], [520, 470], [520, 400], [650, 400]], 30, 12),           // branch to results
-  line([[520, 470], [520, 560], [650, 560]], 30, 13),
-  dot(380, 230, 62, 21),                                                     // start
-  dot(700, 400, 50, 22), dot(700, 560, 50, 23, false),                       // results: one done, one open
-  dot(380, 800, 70, 24, false), dot(380, 800, 26, 25),                       // acceptance: ring with centre
+  `<rect x="40" y="40" width="944" height="944" rx="220" fill="${clay}"/>`,
+  `<path d="M372 300 V724" ${stroke}/>`,                                       // trunk of stages
+  `<path d="M372 512 H500 Q532 512 532 480 V432 Q532 400 564 400 H612" ${stroke}/>`, // branch to a result
+  `<path d="M532 512 V592 Q532 624 564 624 H612" ${stroke}/>`,
+  `<circle cx="372" cy="262" r="58" fill="${ivory}"/>`,                       // first stage
+  `<circle cx="372" cy="762" r="58" fill="${ivory}"/>`,                       // last stage
+  `<circle cx="666" cy="400" r="50" fill="${ivory}"/>`,                       // result done
+  `<circle cx="666" cy="624" r="42" ${stroke.replace('34', '26')}/>`,          // result still open
 ].join('');
-const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><defs><clipPath id="c"><rect x="40" y="40" width="944" height="944" rx="210"/></clipPath></defs><g clip-path="url(#c)">${body}</g></svg>`;
+const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">${body}</svg>`;
 await writeFile('plugins/arborun/assets/logo.svg', svg);
 const browser = await chromium.launch({ channel: process.env.ARBORUN_TEST_BROWSER_CHANNEL || undefined });
 const page = await browser.newPage({ viewport: { width: 512, height: 512 } });

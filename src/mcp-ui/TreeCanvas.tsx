@@ -5,7 +5,7 @@ import {
   isFolder, layoutTree, stateLabel, taskEnds, TASK_ID, viewDescendants, visibleCard, zoomCamera, type Camera, type Counts, type Point, type TreeView, type ViewNode,
 } from './canvas-model';
 import { collaborationMessages, currentWork } from './collaboration-model';
-import { SKETCH_M, bez, cardMarkup, edgeMarkup, frameMarkup, glyphMarkup, messageCurve, messageMarkup, ringMarkup, type CardLook, type RingSegment } from './sketch';
+import { SKETCH_M, bez, edgeMarkup, glyphMarkup, messageCurve, messageMarkup, ringMarkup, type RingSegment } from './sketch';
 import './canvas.css';
 
 export interface TreeCanvasProps {
@@ -57,7 +57,7 @@ export function Glyph({ session, view, id, size = 16 }: { session: Session; view
   const status = aggregateStatus(session, view, id);
   const kind = v.node?.parentId === null ? 'start' : v.kind === 'accept' ? 'accept' : v.kind === 'result' ? 'result' : 'other';
   const running = activeAttempts(session).find(a => a.nodeId === id || viewDescendants(view, id).includes(a.nodeId));
-  const html = glyphMarkup(id, kind, status, { agentColor: agentColor(session, running?.agentId), ready: session.status === 'review', accepted: session.status === 'accepted', approved: session.status !== 'draft' });
+  const html = glyphMarkup(kind, status, { agentColor: agentColor(session, running?.agentId), ready: session.status === 'review', accepted: session.status === 'accepted', approved: session.status !== 'draft' });
   return <svg className="glyph" viewBox="0 0 16 16" width={size} height={size} aria-hidden="true" dangerouslySetInnerHTML={{ __html: html }} />;
 }
 export function Avatar({ session, agentId }: { session: Session; agentId: string }) {
@@ -295,8 +295,8 @@ export function TreeCanvas({ session, selectedId, onSelect, onEnter, editing = f
   for (const l of layout.lines) {
     const hl = selectedId && (l.from === selectedId || l.to === selectedId);
     const quiet = view.get(l.to)?.kind === 'work' || view.get(l.to)?.node?.kind === 'action';
-    const color = hl ? 'var(--ink)' : l.trunk ? 'var(--ink-2)' : quiet ? 'var(--faint)' : 'var(--line-strong)';
-    edges += `<g class="edge" data-from="${l.from}" data-to="${l.to}">${edgeMarkup(trim(l.pts, layout.pos.has(l.from), layout.pos.has(l.to)), `${l.from}>${l.to}`, color, hl ? 1.9 : l.trunk ? 1.6 : 1.3, Boolean(quiet && !hl))}</g>`;
+    const color = hl ? 'var(--accent)' : l.trunk ? 'var(--faint)' : 'var(--line-strong)';
+    edges += `<g class="edge" data-from="${l.from}" data-to="${l.to}">${edgeMarkup(trim(l.pts, layout.pos.has(l.from), layout.pos.has(l.to)), color, hl ? 1.8 : 1.3, Boolean(quiet && !hl))}</g>`;
   }
   const boxes = [...[...layout.pos.values()].map(p => [p.x - CARD_W / 2 - 6, p.y - CARD_H / 2 - 6, p.x + CARD_W / 2 + 6, p.y + CARD_H / 2 + 6]), ...layout.rects.map(r => [r.x, r.y - 4, r.x + Math.min(r.w, 320), r.y + FRAME_HEAD])];
   const hits = (b: number[]) => boxes.some(o => b[0] < o[2] && b[2] > o[0] && b[1] < o[3] && b[3] > o[1]);
@@ -307,7 +307,7 @@ export function TreeCanvas({ session, selectedId, onSelect, onEnter, editing = f
     const a = visibleCard(view, layout.pos, sent.nodeId), b = visibleCard(view, layout.pos, target);
     if (!a || !b || a === b) return;
     const d = messageCurve(layout.pos.get(a)!, layout.pos.get(b)!, i), color = agentVar(sent.agentId);
-    edges += `<g class="msg" data-from="${a}" data-to="${b}">${messageMarkup(d, sent.id, color, Boolean(received))}</g>`;
+    edges += `<g class="msg" data-from="${a}" data-to="${b}">${messageMarkup(d, color, Boolean(received))}</g>`;
     const cw = Math.min(250, 76 + sent.summary.length * 12.5), ch = 28;
     let spot: Point | null = null;
     for (const t of [.5, .4, .6, .3, .7, .2, .8]) {
@@ -334,13 +334,6 @@ export function TreeCanvas({ session, selectedId, onSelect, onEnter, editing = f
     const act = attempt && [...(session.activities ?? [])].reverse().find(x => x.attemptId === attempt.id && x.kind === 'action' && x.revision === session.revision);
     const folded = isFolder(v) && !expanded.has(id) && id !== scope && !(layout.trunk.includes(id) && expanded.has(id));
     const selected = selectedId === id;
-    const look: CardLook = {
-      color: selected ? 'var(--ink)' : isRoot || v.kind === 'accept' ? 'var(--ink-2)' : status === 'failed' && !quiet ? 'var(--fail)'
-        : status === 'blocked' || status === 'stale' ? 'var(--wait)' : v.kind === 'result' ? 'var(--ink-2)' : quiet ? 'var(--faint)' : 'var(--line-strong)',
-      width: selected ? 1.9 : v.kind === 'result' ? 1.7 : quiet ? 1.1 : 1.4,
-      dashed: (quiet && !attempt && !selected) || status === 'stale', stacked: folded,
-      hatch: !quiet && !isFolder(v) && !isRoot && status === 'failed', selected, live: Boolean(attempt),
-    };
     // Each agent inks its own arc of the ring as its steps and tests pass.
     const progress = agentProgress(session, view, id), owned = progress.reduce((t, a) => t + a.total, 0);
     const ring: RingSegment[] = progress.map(a => ({ agentId: a.agentId, color: agentVar(a.agentId), share: a.total / owned, done: a.done / a.total, running: a.running > 0 }));
@@ -353,12 +346,11 @@ export function TreeCanvas({ session, selectedId, onSelect, onEnter, editing = f
     else if (isFolder(v) || v.kind === 'accept') meta = c.total > 0 && <span className="meta">{c.passed + c.skipped}/{c.total}</span>;
     else if (n?.kind === 'test') meta = <span className={`by ${n.by ?? 'agent'}`}>{n.by === 'user' ? '你设定' : 'Agent 补充'}</span>;
     return <div key={id} className={['node', folded && 'group collapsed', isRoot && 'start', v.kind === 'accept' && 'end', quiet && 'work', dragging === id && 'dragging', impact?.has(id) && 'impacted'].filter(Boolean).join(' ')}
-      role="treeitem" tabIndex={-1} data-id={id} data-node={id} data-node-id={id} data-kind={v.kind} data-state={status} data-status={status} data-running={Boolean(attempt)} data-live={Boolean(attempt)} data-look={JSON.stringify(look)}
+      role="treeitem" tabIndex={-1} data-id={id} data-node={id} data-node-id={id} data-kind={v.kind} data-state={status} data-status={status} data-running={Boolean(attempt)} data-live={Boolean(attempt)}
       data-agents={progress.map(a => `${a.agentId}:${a.done}/${a.total}`).join(' ')}
       aria-selected={selected} aria-label={`${isRoot ? '起点' : v.title}，${label}`} data-selected={selected}
       style={{ left: p.x - CARD_W / 2, top: p.y - CARD_H / 2, ...(attempt ? { '--agent': agentVar(attempt.agentId) } : {}) } as React.CSSProperties}>
-      <svg className="sketch" viewBox={`0 0 ${CARD_W + SKETCH_M * 2} ${CARD_H + SKETCH_M * 2}`} aria-hidden="true" dangerouslySetInnerHTML={{ __html: cardMarkup(id, look) }} />
-      {ring.length > 0 && <svg className="ring" viewBox={`0 0 ${CARD_W + SKETCH_M * 2} ${CARD_H + SKETCH_M * 2}`} aria-hidden="true" dangerouslySetInnerHTML={{ __html: ringMarkup(id, ring) }} />}
+      {ring.length > 0 && <svg className="ring" viewBox={`0 0 ${CARD_W + SKETCH_M * 2} ${CARD_H + SKETCH_M * 2}`} aria-hidden="true" dangerouslySetInnerHTML={{ __html: ringMarkup(ring) }} />}
       <div className="head"><span className="title">{isRoot ? '起点' : v.title}</span></div>
       <div className="body">
         {attempt ? <span className="doing" title={act?.summary}>{act?.summary ?? `${agentName(attempt.agentId)} 已领取`}</span> : <span className="text">{text}</span>}
@@ -392,9 +384,7 @@ export function TreeCanvas({ session, selectedId, onSelect, onEnter, editing = f
         style={{ transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.zoom})`, '--inv': 1 / camera.zoom } as React.CSSProperties}>
         {layout.rects.map(r => {
           const v = view.get(r.id)!, s = aggregateStatus(session, view, r.id), c = counts(session, view, r.id);
-          const color = s === 'failed' && v.kind !== 'work' ? 'var(--fail)' : v.kind === 'result' ? 'var(--line-strong)' : 'var(--line)';
           return <div key={r.id} className="region" data-region={r.id} data-kind={v.kind} data-state={s} style={{ left: r.x, top: r.y, width: r.w, height: r.h }}>
-            <svg viewBox={`0 0 ${r.w + 12} ${r.h + 12}`} aria-hidden="true" dangerouslySetInnerHTML={{ __html: frameMarkup(r.id, r.w, r.h, color, v.kind === 'result') }} />
             <div className="region-head"><button type="button" className="region-title" data-select={r.id}><Glyph session={session} view={view} id={r.id} size={14} /><span>{v.title}</span></button>
               <MiniBar c={c} /><span className="region-count">{c.passed} / {c.total}</span>
               <button type="button" className="collapse" data-toggle={r.id} aria-label={`收起：${v.title}`}>−</button></div>
