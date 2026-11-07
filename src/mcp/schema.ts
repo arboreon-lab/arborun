@@ -6,7 +6,9 @@ const short = z.string().trim().min(1).max(300);
 const revision = z.number().int().positive();
 
 export const nodeSchema = z.object({
-  id, parentId: id.nullable(), kind: z.enum(['group', 'action', 'condition', 'agent']),
+  // result: an effect the person can see; test: how that effect is proven (who set it is recorded in `by`).
+  id, parentId: id.nullable(), kind: z.enum(['group', 'result', 'test', 'action', 'condition', 'agent']),
+  by: z.enum(['user', 'agent']).optional(),
   title: short, action: z.string().max(12000).default(''), target: z.string().max(2000).default(''),
   input: z.string().max(12000).default(''), acceptance: z.array(text).max(30).default([]),
   failure: z.string().max(12000).default(''), dependsOn: z.array(id).max(100).default([]),
@@ -16,9 +18,11 @@ export const nodeSchema = z.object({
 export const agentSchema = z.object({
   id, name: short, role: text, scope: text, budget: text, parentId: id.optional(),
 }).strict();
+export const clarificationSchema = z.object({ question: text, answer: z.string().trim().max(12000).optional() }).strict();
 const planFields = {
   title: short, goal: text, context: z.array(text).max(50).default([]),
   nodes: z.array(nodeSchema).min(2).max(100), agents: z.array(agentSchema).min(1).max(20),
+  clarifications: z.array(clarificationSchema).max(30).optional(),
 };
 export const proposeSchema = z.object({
   sessionId: id.optional(), expectedRevision: revision.optional(), ...planFields,
@@ -31,6 +35,12 @@ export const reportSchema = z.object({
   checks: z.array(z.object({ criterion: text, passed: z.boolean(), evidence: text }).strict()).max(30).default([]),
   conditionOutcome: z.union([z.boolean(), z.literal('unknown')]).optional(),
 }).strict();
+const activityBase = { sessionId: id, attemptId: id, claimToken: id, eventId: id, summary: text, runtimeAgentId: id.optional() };
+export const activitySchema = z.discriminatedUnion('kind', [
+  z.object({ ...activityBase, kind: z.literal('action'), target: z.string().trim().max(2000).optional() }).strict(),
+  z.object({ ...activityBase, kind: z.literal('message_sent'), messageId: id, toAgentId: id, toNodeId: id.optional() }).strict(),
+  z.object({ ...activityBase, kind: z.literal('message_received'), messageId: id }).strict(),
+]);
 export const submitSchema = z.object({ sessionId: id, revision }).strict();
 const userBase = { sessionId: id, expectedRevision: revision };
 export const userActionSchema = z.discriminatedUnion('type', [
@@ -49,6 +59,8 @@ export type AgentSpec = z.infer<typeof agentSchema>;
 export type ProposeInput = z.input<typeof proposeSchema>;
 export type ClaimInput = z.input<typeof claimSchema>;
 export type ReportInput = z.input<typeof reportSchema>;
+export type ActivityInput = z.input<typeof activitySchema>;
+export interface PlanClarification { question: string; answer: string }
 export type SubmitInput = z.input<typeof submitSchema>;
 export type UserActionInput = z.input<typeof userActionSchema>;
 export type NodeStatus = 'draft' | 'ready' | 'running' | 'passed' | 'failed' | 'blocked' | 'skipped' | 'stale';
@@ -69,14 +81,23 @@ export interface ArborunEvent {
   nodeId?: string; agentId?: string; attemptId?: string; requestHash?: string;
   provenance: 'agent_reported' | 'user_confirmed' | 'arborun';
 }
+export interface AgentActivity {
+  id: string; sequence: number; at: string; revision: number;
+  kind: 'action' | 'message_sent' | 'message_received'; summary: string;
+  nodeId: string; agentId: string; attemptId: string; runtimeAgentId?: string;
+  target?: string; messageId?: string; toAgentId?: string; toNodeId?: string;
+  fromAgentId?: string; fromNodeId?: string; sentActivityId?: string;
+  provenance: 'agent_reported';
+}
 export interface Session {
   id: string; title: string; goal: string; context: string[]; revision: number;
   status: 'draft' | 'approved' | 'running' | 'paused' | 'review' | 'accepted';
   nodes: NodeState[]; agents: AgentSpec[]; approval?: Approval;
   attempts: AttemptView[]; events: ArborunEvent[];
+  activities?: AgentActivity[]; clarifications?: PlanClarification[];
   review?: { revision: number; tree: string; submittedAt: string; acceptedAt?: string };
   aiRequests: string[]; createdAt: string; updatedAt: string;
-  history: { revision: number; title: string; goal: string; context: string[]; nodes: NodeSpec[]; agents: AgentSpec[]; at: string }[];
+  history: { revision: number; title: string; goal: string; context: string[]; nodes: NodeSpec[]; agents: AgentSpec[]; clarifications?: PlanClarification[]; at: string }[];
 }
 export interface ArborunSnapshot {
   version: 1; sessions: Session[];

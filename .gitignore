@@ -2,12 +2,12 @@ node_modules/
 dist/
 dist-desktop/
 release/
-test-results/
+test-results*/
 playwright-report/
 .env*
 *.log
 .DS_Store
 *.sqlite*
-dist-mcp/
-plugins/arborun/dist-mcp/
+/dist-mcp/
 .arborun-mcp/
+# The plugin's built server and UI are committed so Codex can install straight from GitHub.

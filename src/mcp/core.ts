@@ -1,9 +1,9 @@
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import {
-  claimSchema, proposeSchema, reportSchema, submitSchema, userActionSchema,
-  type AgentSpec, type ArborunEvent, type ArborunSnapshot, type AttemptView, type ClaimInput,
+  activitySchema, claimSchema, proposeSchema, reportSchema, submitSchema, userActionSchema,
+  type ActivityInput, type AgentActivity, type AgentSpec, type ArborunEvent, type ArborunSnapshot, type AttemptView, type ClaimInput,
   type NodeSpec, type NodeState, type ProposeInput, type ReportInput, type Session,
-  type SubmitInput, type UserActionInput,
+  type PlanClarification, type SubmitInput, type UserActionInput,
 } from './schema';
 
 const clone = <T>(value: T): T => structuredClone(value);
@@ -16,13 +16,22 @@ function canonical(value: unknown): string {
   return JSON.stringify(value);
 }
 const hash = (value: unknown) => createHash('sha256').update(canonical(value)).digest('hex');
+/** Containers hold other nodes and are never claimed: plain groups and visible results. */
+export const isContainer = (node: Pick<NodeSpec, 'kind'>) => node.kind === 'group' || node.kind === 'result';
 const spec = (node: NodeSpec): NodeSpec => ({
-  id: node.id, parentId: node.parentId, kind: node.kind, title: node.title,
+  id: node.id, parentId: node.parentId, kind: node.kind, ...(node.by ? { by: node.by } : {}), title: node.title,
   action: node.action, target: node.target, input: node.input, acceptance: [...node.acceptance],
   failure: node.failure, dependsOn: [...node.dependsOn], ...(node.when ? { when: clone(node.when) } : {}), agentId: node.agentId,
 });
 function planHash(session: Session): string {
-  return hash({ title: session.title, goal: session.goal, context: session.context, nodes: session.nodes.map(spec), agents: session.agents });
+  return hash({ title: session.title, goal: session.goal, context: session.context, nodes: session.nodes.map(spec), agents: session.agents,
+    ...(session.clarifications?.length ? { clarifications: session.clarifications } : {}) });
+}
+
+function confirmedClarifications(values: { question: string; answer?: string }[] = []): PlanClarification[] {
+  const unanswered = values.filter(item => !item.answer?.trim());
+  if (unanswered.length) throw new Error(`请先由 Codex 在对话中询问并确认以下问题，再生成执行树：${unanswered.map(item => item.question).join('；')}`);
+  return values.map(item => ({ question: item.question, answer: item.answer!.trim() }));
 }
 function ancestorNodes(node: NodeSpec, nodes: NodeSpec[]): NodeSpec[] {
   const result: NodeSpec[] = [];
@@ -59,34 +68,51 @@ export function validatePlan(nodes: NodeSpec[], agents: AgentSpec[]): void {
   }
   for (const node of nodes) {
     const parents = ancestorNodes(node, nodes);
-    if (parents.some(n => !['group', 'agent'].includes(n.kind))) throw new Error('只有分组或 Agent 节点可以包含子节点');
-    if (node.kind !== 'group' && (!node.action.trim() || !node.target.trim() || !node.input.trim() || !node.failure.trim() || !node.acceptance.length)) {
+    if (parents.some(n => !['group', 'result', 'agent'].includes(n.kind))) throw new Error('只有分组、效果或 Agent 节点可以包含子节点');
+    if (node.kind === 'result' && !node.action.trim()) throw new Error(`请写明要达到的效果：${node.title}`);
+    if (!isContainer(node) && (!node.action.trim() || !node.target.trim() || !node.input.trim() || !node.failure.trim() || !node.acceptance.length)) {
       throw new Error(`请补齐动作、对象、输入、通过条件与失败处理：${node.title}`);
     }
-    if (node.kind !== 'group' && !agentIds.has(node.agentId)) throw new Error(`执行 Agent 未声明：${node.agentId}`);
+    if (node.by && node.kind !== 'test') throw new Error('只有测试节点可以标注设定者');
+    if (!isContainer(node) && !agentIds.has(node.agentId)) throw new Error(`执行 Agent 未声明：${node.agentId}`);
     if (new Set(node.dependsOn).size !== node.dependsOn.length) throw new Error('依赖节点不得重复');
-    if (node.kind === 'group' && node.dependsOn.length) throw new Error('分组不能声明执行依赖，请将依赖放在具体步骤');
+    if (isContainer(node) && node.dependsOn.length) throw new Error('分组或效果不能声明执行依赖，请将依赖放在具体步骤');
     for (const dependency of node.dependsOn) {
       const found = nodes.find(n => n.id === dependency);
       if (!found) throw new Error(`依赖节点不存在：${dependency}`);
-      if (found.kind === 'group') throw new Error('执行依赖须指向具体步骤');
+      if (isContainer(found)) throw new Error('执行依赖须指向具体步骤');
     }
     for (const guard of guards(node, nodes)) {
       if (nodes.find(n => n.id === guard.nodeId)?.kind !== 'condition') throw new Error('分支条件必须引用条件节点');
     }
   }
-  if (nodes.some(node => node.kind === 'group' && !nodes.some(n => n.parentId === node.id))) throw new Error('分组至少需要一个子节点');
+  if (nodes.some(node => isContainer(node) && !nodes.some(n => n.parentId === node.id))) throw new Error('分组至少需要一个子节点');
+  for (const result of nodes.filter(n => n.kind === 'result')) {
+    const inside = (n: NodeSpec) => ancestorNodes(n, nodes).some(a => a.id === result.id);
+    if (!nodes.some(n => n.kind === 'test' && inside(n))) throw new Error(`效果至少需要一个测试来证明：${result.title}`);
+  }
   const visiting = new Set<string>(), visited = new Set<string>();
   const visit = (node: NodeSpec) => {
     if (visiting.has(node.id)) throw new Error('执行依赖或条件存在循环');
     if (visited.has(node.id)) return;
     visiting.add(node.id);
-    const childWork = node.kind === 'agent' ? nodes.filter(n => n.kind !== 'group' && ancestorNodes(n, nodes).some(a => a.id === node.id)).map(n => n.id) : [];
+    const childWork = node.kind === 'agent' ? nodes.filter(n => !isContainer(n) && ancestorNodes(n, nodes).some(a => a.id === node.id)).map(n => n.id) : [];
     for (const dependency of new Set([...node.dependsOn, ...guards(node, nodes).map(g => g.nodeId), ...childWork])) visit(nodes.find(n => n.id === dependency)!);
     visiting.delete(node.id); visited.add(node.id);
   };
   nodes.forEach(visit);
-  if (!nodes.some(n => n.kind !== 'group')) throw new Error('至少需要一个具体执行步骤');
+  if (!nodes.some(n => !isContainer(n))) throw new Error('至少需要一个具体执行步骤');
+}
+
+/** Tests the person set are the acceptance contract: an agent's plan update may add tests but never edit or drop these. */
+export function assertUserTestsKept(previous: NodeSpec[], next: NodeSpec[]): void {
+  const fields = (n: NodeSpec) => hash({ title: n.title, action: n.action, target: n.target, input: n.input, acceptance: n.acceptance, failure: n.failure });
+  for (const test of previous.filter(n => n.kind === 'test' && n.by === 'user')) {
+    const kept = next.find(n => n.id === test.id);
+    if (!kept || kept.kind !== 'test' || kept.by !== 'user' || fields(kept) !== fields(test)) {
+      throw new Error(`用户设定的测试不能由 Agent 修改或删除：${test.title}。如需调整，请让用户在树中编辑。`);
+    }
+  }
 }
 
 export class ArborunService {
@@ -96,7 +122,9 @@ export class ArborunService {
     if (this.state.version !== 1 || !Array.isArray(this.state.sessions) || !Array.isArray(this.state.grants)) throw new Error('不支持的 Arborun 数据格式');
     if (new Set(this.state.sessions.map(s => s.id)).size !== this.state.sessions.length) throw new Error('重复的任务 ID');
     for (const session of this.state.sessions) {
-      const plan = proposeSchema.parse({ title: session.title, goal: session.goal, context: session.context, nodes: session.nodes.map(spec), agents: session.agents });
+      const plan = proposeSchema.parse({ title: session.title, goal: session.goal, context: session.context, nodes: session.nodes.map(spec), agents: session.agents, clarifications: session.clarifications });
+      session.clarifications = confirmedClarifications(plan.clarifications);
+      session.activities ??= [];
       validatePlan(plan.nodes, plan.agents);
       if (!Number.isInteger(session.revision) || session.revision < 1 || !Array.isArray(session.events) || !Array.isArray(session.attempts) || !Array.isArray(session.history)) throw new Error('任务数据损坏');
       if (session.approval && (session.approval.revision !== session.revision || session.approval.hash !== planHash(session))) throw new Error('批准版本与计划不匹配');
@@ -127,7 +155,7 @@ export class ArborunService {
     session.updatedAt = now();
   }
   private history(session: Session) {
-    session.history.push({ revision: session.revision, title: session.title, goal: session.goal, context: clone(session.context), nodes: session.nodes.map(spec), agents: clone(session.agents), at: now() });
+    session.history.push({ revision: session.revision, title: session.title, goal: session.goal, context: clone(session.context), nodes: session.nodes.map(spec), agents: clone(session.agents), clarifications: clone(session.clarifications ?? []), at: now() });
   }
   private assertRevision(session: Session, revision: number | undefined) {
     if (revision !== session.revision) throw new Error(`计划已更新，请读取当前版本 ${session.revision} 后重试`);
@@ -163,7 +191,7 @@ export class ArborunService {
     // Iterate because an inactive condition branch can make its dependent branches inactive.
     for (let pass = 0; pass < session.nodes.length; pass++) {
       let changed = false;
-      for (const node of session.nodes.filter(n => n.kind !== 'group')) {
+      for (const node of session.nodes.filter(n => !isContainer(n))) {
         const guard = this.guardState(node, session);
         if (guard === 'inactive' && !['running', 'passed'].includes(node.status)) {
           if (node.status !== 'skipped') changed = true;
@@ -176,7 +204,7 @@ export class ArborunService {
       }
       if (!changed) break;
     }
-    for (const group of session.nodes.filter(n => n.kind === 'group').sort((a, b) => ancestorNodes(b, session.nodes).length - ancestorNodes(a, session.nodes).length)) {
+    for (const group of session.nodes.filter(isContainer).sort((a, b) => ancestorNodes(b, session.nodes).length - ancestorNodes(a, session.nodes).length)) {
       const children = session.nodes.filter(n => n.parentId === group.id);
       if (this.guardState(group, session) === 'inactive') group.status = 'skipped';
       else if (children.some(n => n.status === 'running')) group.status = 'running';
@@ -187,11 +215,12 @@ export class ArborunService {
       else group.status = approved ? 'ready' : 'draft';
     }
   }
-  private replacePlan(session: Session, plan: { title: string; goal: string; context: string[]; nodes: NodeSpec[]; agents: AgentSpec[] }, provenance: ArborunEvent['provenance']) {
+  private replacePlan(session: Session, plan: { title: string; goal: string; context: string[]; nodes: NodeSpec[]; agents: AgentSpec[]; clarifications?: { question: string; answer?: string }[] }, provenance: ArborunEvent['provenance']) {
     validatePlan(plan.nodes, plan.agents);
+    const clarifications = confirmedClarifications(plan.clarifications ?? session.clarifications);
     const oldNodes = clone(session.nodes);
     const changed = new Set<string>();
-    const allChanged = session.goal !== plan.goal || hash(session.context) !== hash(plan.context);
+    const allChanged = session.goal !== plan.goal || hash(session.context) !== hash(plan.context) || hash(session.clarifications ?? []) !== hash(clarifications);
     const changedAgents = new Set([...session.agents, ...plan.agents].filter(a => hash(session.agents.find(old => old.id === a.id) ?? null) !== hash(plan.agents.find(next => next.id === a.id) ?? null)).map(a => a.id));
     for (const node of [...oldNodes, ...plan.nodes]) {
       const old = oldNodes.find(n => n.id === node.id), next = plan.nodes.find(n => n.id === node.id);
@@ -212,7 +241,7 @@ export class ArborunService {
     }
     this.invalidateRunning(session, '计划修改后原执行已失效；宿主外部动作可能仍需核对。');
     session.revision += 1; session.approval = undefined; session.review = undefined; session.status = 'draft';
-    session.title = plan.title; session.goal = plan.goal; session.context = clone(plan.context); session.agents = clone(plan.agents);
+    session.title = plan.title; session.goal = plan.goal; session.context = clone(plan.context); session.agents = clone(plan.agents); session.clarifications = clarifications;
     session.nodes = plan.nodes.map(node => {
       const old = oldNodes.find(n => n.id === node.id);
       if (old && !changed.has(node.id) && old.status === 'passed') return { ...clone(old), ...clone(node) };
@@ -222,9 +251,10 @@ export class ArborunService {
     this.event(session, 'plan_changed', `计划更新为版本 ${session.revision}，原批准已撤销；${changed.size} 个节点受到影响。`, provenance);
   }
   propose(input: ProposeInput): Session {
-    const parsed = proposeSchema.parse(input); validatePlan(parsed.nodes, parsed.agents);
+    const parsed = proposeSchema.parse(input); confirmedClarifications(parsed.clarifications); validatePlan(parsed.nodes, parsed.agents);
     if (parsed.sessionId) return this.transaction(parsed.sessionId, session => {
       this.assertRevision(session, parsed.expectedRevision);
+      assertUserTestsKept(session.nodes, parsed.nodes);
       this.replacePlan(session, parsed, 'agent_reported');
     });
     if (parsed.expectedRevision !== undefined) throw new Error('新任务不能携带旧版本');
@@ -232,7 +262,7 @@ export class ArborunService {
     const session: Session = {
       id: randomUUID(), title: parsed.title, goal: parsed.goal, context: parsed.context, revision: 1, status: 'draft',
       nodes: parsed.nodes.map(n => ({ ...n, status: 'draft' })), agents: parsed.agents,
-      attempts: [], events: [], aiRequests: [], history: [], createdAt: timestamp, updatedAt: timestamp,
+      attempts: [], events: [], activities: [], clarifications: confirmedClarifications(parsed.clarifications), aiRequests: [], history: [], createdAt: timestamp, updatedAt: timestamp,
     };
     this.history(session); this.event(session, 'plan_created', '计划已生成，等待用户修改或批准。', 'agent_reported');
     this.refresh(session); this.state.sessions.push(session); return clone(session);
@@ -242,7 +272,7 @@ export class ArborunService {
     const session = this.transaction(parsed.sessionId, task => {
       this.assertApproved(task, parsed.revision);
       const node = task.nodes.find(n => n.id === parsed.nodeId);
-      if (!node || node.kind === 'group') throw new Error('只能领取具体执行节点');
+      if (!node || isContainer(node)) throw new Error('只能领取具体执行节点');
       if (!task.agents.some(a => a.id === parsed.agentId) || node.agentId !== parsed.agentId) throw new Error('该 Agent 未声明或未分配此节点');
       if (['running', 'passed', 'skipped'].includes(node.status)) throw new Error('节点已领取、通过或不适用');
       if (this.guardState(node, task) !== 'active') throw new Error('条件分支尚未成立');
@@ -276,7 +306,7 @@ export class ArborunService {
         if (attempt.specification.acceptance.some(criterion => !parsed.checks.some(check => check.criterion === criterion && check.passed))) throw new Error('每项通过条件都需要明确的成功检查与证据');
         if (parsed.checks.some(check => !check.passed || !attempt.specification.acceptance.includes(check.criterion))) throw new Error('检查失败或检查项不属于当前节点');
         if (attempt.specification.kind === 'condition' && typeof parsed.conditionOutcome !== 'boolean') throw new Error('条件节点通过需要明确 true 或 false；unknown 应报告 blocked');
-        if (attempt.specification.kind === 'agent' && session.nodes.some(n => n.kind !== 'group' && ancestorNodes(n, session.nodes).some(a => a.id === attempt.nodeId) && !['passed', 'skipped'].includes(n.status))) {
+        if (attempt.specification.kind === 'agent' && session.nodes.some(n => !isContainer(n) && ancestorNodes(n, session.nodes).some(a => a.id === attempt.nodeId) && !['passed', 'skipped'].includes(n.status))) {
           throw new Error('子 Agent 分支尚未完成，不能检查采用父节点结果');
         }
       }
@@ -299,12 +329,55 @@ export class ArborunService {
       });
     });
   }
+  /** Observes actual host actions/messages; this method does not dispatch work or messages. */
+  activity(input: ActivityInput): Session {
+    const parsed = activitySchema.parse(input), digest = hash(parsed);
+    return this.transaction(parsed.sessionId, session => {
+      const attempt = session.attempts.find(item => item.id === parsed.attemptId);
+      const grant = this.state.grants.find(item => item.attemptId === parsed.attemptId);
+      if (!attempt || !grant || Buffer.byteLength(parsed.claimToken) !== Buffer.byteLength(grant.token) || !timingSafeEqual(Buffer.from(parsed.claimToken), Buffer.from(grant.token))) throw new Error('执行凭证无效');
+      this.assertApproved(session, attempt.revision);
+      const node = session.nodes.find(item => item.id === attempt.nodeId);
+      if (attempt.invalidated || attempt.status !== 'running' || session.approval?.id !== attempt.approvalId || node?.attemptId !== attempt.id || node.status !== 'running') throw new Error('协作活动需要当前有效且正在执行的节点');
+      const duplicate = session.events.find(event => event.id === parsed.eventId);
+      if (duplicate) {
+        if (duplicate.requestHash !== digest) throw new Error('eventId 已用于不同的上报内容');
+        return;
+      }
+      const activities = session.activities ??= [];
+      const entry: AgentActivity = {
+        id: parsed.eventId, sequence: (activities.at(-1)?.sequence ?? 0) + 1, at: now(), revision: session.revision,
+        kind: parsed.kind, summary: parsed.summary, nodeId: attempt.nodeId, agentId: attempt.agentId,
+        attemptId: attempt.id, ...(parsed.runtimeAgentId ? { runtimeAgentId: parsed.runtimeAgentId } : {}), provenance: 'agent_reported',
+      };
+      if (parsed.kind === 'action') {
+        if (parsed.target !== undefined) entry.target = parsed.target;
+      } else if (parsed.kind === 'message_sent') {
+        if (!session.agents.some(agent => agent.id === parsed.toAgentId)) throw new Error('消息接收 Agent 未在计划中声明');
+        if (parsed.toNodeId && !session.nodes.some(target => target.id === parsed.toNodeId && !isContainer(target) && target.agentId === parsed.toAgentId)) throw new Error('消息目标节点不属于接收 Agent');
+        if (activities.some(item => item.revision === session.revision && item.kind === 'message_sent' && item.messageId === parsed.messageId)) throw new Error('messageId 已用于当前版本的其他发送记录');
+        entry.messageId = parsed.messageId; entry.toAgentId = parsed.toAgentId;
+        if (parsed.toNodeId) entry.toNodeId = parsed.toNodeId;
+      } else {
+        const sent = activities.find(item => item.revision === session.revision && item.kind === 'message_sent' && item.messageId === parsed.messageId);
+        if (!sent) throw new Error('当前版本没有对应的已发送消息');
+        if (sent.toAgentId !== attempt.agentId || (sent.toNodeId && sent.toNodeId !== attempt.nodeId)) throw new Error('当前执行节点不是该消息的接收者');
+        if (activities.some(item => item.kind === 'message_received' && item.sentActivityId === sent.id)) throw new Error('此消息的接收记录已经存在');
+        entry.messageId = parsed.messageId; entry.fromAgentId = sent.agentId; entry.fromNodeId = sent.nodeId;
+        entry.toAgentId = attempt.agentId; entry.toNodeId = attempt.nodeId; entry.sentActivityId = sent.id;
+      }
+      activities.push(entry);
+      this.event(session, `activity_${parsed.kind}`, parsed.summary, 'agent_reported', {
+        id: parsed.eventId, requestHash: digest, nodeId: attempt.nodeId, agentId: attempt.agentId, attemptId: attempt.id,
+      });
+    });
+  }
   submit(input: SubmitInput): Session {
     const parsed = submitSchema.parse(input);
     return this.transaction(parsed.sessionId, session => {
       if (session.status === 'review' && session.review?.revision === parsed.revision) return;
       this.assertApproved(session, parsed.revision); this.refresh(session);
-      if (session.attempts.some(a => a.status === 'running') || session.nodes.some(n => n.kind !== 'group' && !['passed', 'skipped'].includes(n.status))) throw new Error('还有未完成、失败、未知或失效节点，不能提交验收');
+      if (session.attempts.some(a => a.status === 'running') || session.nodes.some(n => !isContainer(n) && !['passed', 'skipped'].includes(n.status))) throw new Error('还有未完成、失败、未知或失效节点，不能提交验收');
       session.status = 'review';
       session.review = { revision: session.revision, tree: this.tree(session), submittedAt: now() };
       this.event(session, 'submitted', '执行记录已汇总成验收树，等待用户验收。外部动作与证据由宿主 Agent 上报。', 'arborun');
@@ -336,7 +409,7 @@ export class ArborunService {
         session.revision += 1; session.approval = undefined; session.review = undefined; session.status = 'draft';
         session.aiRequests.push(parsed.message);
         // Natural-language requests can affect any part of the plan until the host resolves them.
-        for (const node of session.nodes) if (node.kind !== 'group') {
+        for (const node of session.nodes) if (!isContainer(node)) {
           node.status = node.attemptId ? 'stale' : 'draft'; node.conditionOutcome = undefined;
         }
         this.history(session);
@@ -357,12 +430,13 @@ export class ArborunService {
     });
     const root = session.nodes.find(n => n.parentId === null)!;
     const visit = (node: NodeState, prefix: string, last: boolean) => {
-      lines.push(`${prefix}${last ? '└─' : '├─'} ${line(node.title)}（${node.id}）｜${labels[node.status]}${node.kind !== 'group' ? `｜${line(session.agents.find(a => a.id === node.agentId)?.name ?? node.agentId)}` : ''}`);
+      lines.push(`${prefix}${last ? '└─' : '├─'} ${line(node.title)}（${node.id}）｜${labels[node.status]}${node.kind === 'test' ? `｜${node.by === 'user' ? '用户设定' : 'Agent 补充'}` : ''}${!isContainer(node) ? `｜${line(session.agents.find(a => a.id === node.agentId)?.name ?? node.agentId)}` : ''}`);
       const indent = prefix + (last ? '   ' : '│  ');
       const children = session.nodes.filter(n => n.parentId === node.id);
       const details: string[] = [];
       if (node.when) details.push(`触发条件：${node.when.nodeId} = ${node.when.outcome}`);
-      if (node.kind !== 'group') {
+      if (node.kind === 'result') details.push(`要达到的效果：${node.action}`);
+      if (!isContainer(node)) {
         details.push(`动作：${node.action}`, `对象：${node.target}`, `输入：${node.input}`, `通过条件：${node.acceptance.join('；')}`, `失败处理：${node.failure}`);
         if (node.dependsOn.length) details.push(`执行依赖：${node.dependsOn.join('、')}`);
         if (node.conditionOutcome !== undefined) details.push(`条件结果：${node.conditionOutcome}`);

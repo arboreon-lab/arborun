@@ -18,7 +18,8 @@ async function connect() {
 try {
   const client = await connect();
   const listed = await client.listTools();
-  assert.equal(listed.tools.length, 6);
+  assert.equal(listed.tools.length, 7);
+  assert.ok(listed.tools.some(tool => tool.name === 'arborun_activity'));
   const resource = await client.readResource({ uri: 'ui://arborun/tree.html' });
   assert.match(resource.contents[0].mimeType, /mcp-app/);
   const call = (name, args) => client.callTool({ name, arguments: args });

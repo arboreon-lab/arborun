@@ -1,0 +1,318 @@
+{
+  "title": "CSV 导出修复",
+  "goal": "导出的 CSV 用 Excel 2016 双击打开时，中文、逗号、引号和换行都显示正确；页面上的导出按钮下载的文件可直接使用。",
+  "context": [
+    "示例数据：用于预览以效果为中心的执行树，不代表真实文件修改。"
+  ],
+  "clarifications": [
+    {
+      "question": "目标用户用哪个版本的 Excel、怎样打开？",
+      "answer": "Windows 上的 Excel 2016，直接双击打开文件"
+    },
+    {
+      "question": "下载是否默认带 BOM？",
+      "answer": "默认带 UTF-8 BOM，并保留关闭的选项"
+    },
+    {
+      "question": "改动范围？",
+      "answer": "只改前端导出逻辑和下载入口，不改后端接口"
+    },
+    {
+      "question": "怎样验收？",
+      "answer": "你设定的测试全部通过才可验收；Agent 可以补充测试，但不能修改你设定的测试"
+    }
+  ],
+  "agents": [
+    {
+      "id": "main",
+      "name": "主 Agent",
+      "role": "拆分效果、安排测试、汇总证据",
+      "scope": "计划与验收记录",
+      "budget": "不直接改代码"
+    },
+    {
+      "id": "export",
+      "name": "实现 Agent",
+      "role": "修改导出与下载逻辑",
+      "scope": "src/exportCsv.ts、src/downloadCsv.ts 及其测试",
+      "budget": "每个失败测试最多自动修复 3 次",
+      "parentId": "main"
+    },
+    {
+      "id": "compat",
+      "name": "验证 Agent",
+      "role": "按测试打开文件、截图并上报结果",
+      "scope": "samples/ 与 Excel 2016 测试环境",
+      "budget": "只读，不改代码",
+      "parentId": "main"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "root",
+      "parentId": null,
+      "kind": "group",
+      "title": "CSV 导出修复",
+      "action": "",
+      "target": "",
+      "input": "",
+      "acceptance": [],
+      "failure": "",
+      "dependsOn": [],
+      "agentId": "main"
+    },
+    {
+      "id": "samples",
+      "parentId": "root",
+      "kind": "result",
+      "title": "验收样本",
+      "action": "6 个样本覆盖中文、逗号、引号、换行和空值，所有测试共用。",
+      "target": "",
+      "input": "",
+      "acceptance": [],
+      "failure": "",
+      "dependsOn": [],
+      "agentId": "main"
+    },
+    {
+      "id": "t-samples",
+      "parentId": "samples",
+      "kind": "test",
+      "title": "样本覆盖全部边界情况",
+      "action": "当打开 samples/ 时，应看到中文、逗号、引号、换行、空值各至少一个样本。",
+      "target": "samples/",
+      "input": "需求中的边界情况清单",
+      "acceptance": [
+        "中文、逗号、引号、换行、空值各至少一个样本"
+      ],
+      "failure": "记录未通过的检查与证据；在预算内自动修复，超出预算时停下并说明原因。",
+      "dependsOn": [],
+      "agentId": "main",
+      "by": "user"
+    },
+    {
+      "id": "effects",
+      "parentId": "root",
+      "kind": "group",
+      "title": "要达到的效果",
+      "action": "三项效果分别验证，互不等待。",
+      "target": "",
+      "input": "",
+      "acceptance": [],
+      "failure": "",
+      "dependsOn": [],
+      "agentId": "main"
+    },
+    {
+      "id": "r-zh",
+      "parentId": "effects",
+      "kind": "result",
+      "title": "中文直接打开不乱码",
+      "action": "用户双击下载的 CSV，Excel 2016 中姓名、备注等中文列正常显示。",
+      "target": "",
+      "input": "",
+      "acceptance": [],
+      "failure": "",
+      "dependsOn": [],
+      "agentId": "main"
+    },
+    {
+      "id": "t-zh-open",
+      "parentId": "r-zh",
+      "kind": "test",
+      "title": "双击打开中文正常",
+      "action": "当用 Excel 2016 双击打开 chinese.csv 时，应看到姓名、备注列中文正常。",
+      "target": "Excel 2016 · samples/chinese.csv",
+      "input": "samples/chinese.csv",
+      "acceptance": [
+        "姓名、备注列中文正常显示"
+      ],
+      "failure": "记录未通过的检查与证据；在预算内自动修复，超出预算时停下并说明原因。",
+      "dependsOn": [
+        "a-bom"
+      ],
+      "agentId": "compat",
+      "by": "user"
+    },
+    {
+      "id": "t-zh-wizard",
+      "parentId": "r-zh",
+      "kind": "test",
+      "title": "导入向导读取正常",
+      "action": "当用导入向导选择 UTF-8 读取同一文件时，应看到与双击打开相同的内容。",
+      "target": "Excel 2016 导入向导",
+      "input": "samples/chinese.csv",
+      "acceptance": [
+        "三列中文与双击打开一致"
+      ],
+      "failure": "记录未通过的检查与证据；在预算内自动修复，超出预算时停下并说明原因。",
+      "dependsOn": [
+        "a-bom"
+      ],
+      "agentId": "compat",
+      "by": "agent"
+    },
+    {
+      "id": "a-bom",
+      "parentId": "r-zh",
+      "kind": "action",
+      "title": "默认下载加 BOM",
+      "action": "下载入口写入 UTF-8 BOM（EF BB BF）。",
+      "target": "src/downloadCsv.ts",
+      "input": "已确认：目标为 Excel 2016 双击打开",
+      "acceptance": [
+        "下载文件以 EF BB BF 开头"
+      ],
+      "failure": "记录未通过的检查与证据；在预算内自动修复，超出预算时停下并说明原因。",
+      "dependsOn": [],
+      "agentId": "export"
+    },
+    {
+      "id": "a-bom-opt",
+      "parentId": "r-zh",
+      "kind": "action",
+      "title": "保留关闭 BOM 的选项",
+      "action": "导出设置中增加“不带 BOM”选项，默认关闭。",
+      "target": "src/downloadCsv.ts",
+      "input": "已确认的编码要求",
+      "acceptance": [
+        "关闭后输出不含 BOM"
+      ],
+      "failure": "记录未通过的检查与证据；在预算内自动修复，超出预算时停下并说明原因。",
+      "dependsOn": [
+        "a-bom"
+      ],
+      "agentId": "export"
+    },
+    {
+      "id": "r-escape",
+      "parentId": "effects",
+      "kind": "result",
+      "title": "特殊字符不错列",
+      "action": "含逗号、引号、换行的字段导入后，列数与原数据一致，内容不被拆开。",
+      "target": "",
+      "input": "",
+      "acceptance": [],
+      "failure": "",
+      "dependsOn": [],
+      "agentId": "main"
+    },
+    {
+      "id": "t-esc-cols",
+      "parentId": "r-escape",
+      "kind": "test",
+      "title": "边界样本列数一致",
+      "action": "当 6 个边界样本用 Excel 打开时，每行列数应与原数据一致。",
+      "target": "Excel 2016 · samples/",
+      "input": "samples/ 全部样本",
+      "acceptance": [
+        "每行列数与原数据一致"
+      ],
+      "failure": "记录未通过的检查与证据；在预算内自动修复，超出预算时停下并说明原因。",
+      "dependsOn": [
+        "a-quote"
+      ],
+      "agentId": "compat",
+      "by": "user"
+    },
+    {
+      "id": "t-esc-multi",
+      "parentId": "r-escape",
+      "kind": "test",
+      "title": "多行备注留在同一格",
+      "action": "当备注含换行时，应看到它仍在同一单元格内。",
+      "target": "Excel 2016 · samples/multiline.csv",
+      "input": "samples/multiline.csv",
+      "acceptance": [
+        "含换行的备注保持在同一单元格"
+      ],
+      "failure": "记录未通过的检查与证据；在预算内自动修复，超出预算时停下并说明原因。",
+      "dependsOn": [
+        "a-quote"
+      ],
+      "agentId": "compat",
+      "by": "agent"
+    },
+    {
+      "id": "a-quote",
+      "parentId": "r-escape",
+      "kind": "action",
+      "title": "字段整体加引号",
+      "action": "含逗号、引号或换行的字段整体加双引号，内部引号成对转义。",
+      "target": "src/exportCsv.ts",
+      "input": "samples/ 与 CSV 规则",
+      "acceptance": [
+        "escapeCell 单元测试通过"
+      ],
+      "failure": "记录未通过的检查与证据；在预算内自动修复，超出预算时停下并说明原因。",
+      "dependsOn": [],
+      "agentId": "export"
+    },
+    {
+      "id": "a-newline",
+      "parentId": "r-escape",
+      "kind": "action",
+      "title": "统一换行后再转义",
+      "action": "先把 \\r\\n 统一为 \\n，再进入转义，避免换行把记录拆开。",
+      "target": "src/exportCsv.ts",
+      "input": "失败样本 comma.csv、multiline.csv",
+      "acceptance": [
+        "失败样本重新导出后列数正确"
+      ],
+      "failure": "记录未通过的检查与证据；在预算内自动修复，超出预算时停下并说明原因。",
+      "dependsOn": [
+        "a-quote"
+      ],
+      "agentId": "export"
+    },
+    {
+      "id": "r-dl",
+      "parentId": "effects",
+      "kind": "result",
+      "title": "导出按钮下载正确文件",
+      "action": "在订单页点击“导出”后，得到 export.csv，可直接用 Excel 打开。",
+      "target": "",
+      "input": "",
+      "acceptance": [],
+      "failure": "",
+      "dependsOn": [],
+      "agentId": "main"
+    },
+    {
+      "id": "t-dl",
+      "parentId": "r-dl",
+      "kind": "test",
+      "title": "点击导出得到 export.csv",
+      "action": "当在订单页点击“导出”时，应下载 export.csv，编码为 UTF-8 BOM。",
+      "target": "订单页 · 导出按钮",
+      "input": "本地开发环境的订单数据",
+      "acceptance": [
+        "下载文件名为 export.csv",
+        "文件以 EF BB BF 开头"
+      ],
+      "failure": "记录未通过的检查与证据；在预算内自动修复，超出预算时停下并说明原因。",
+      "dependsOn": [
+        "a-dl"
+      ],
+      "agentId": "compat",
+      "by": "user"
+    },
+    {
+      "id": "a-dl",
+      "parentId": "r-dl",
+      "kind": "action",
+      "title": "调整下载文件名与编码",
+      "action": "下载文件名固定为 export.csv，并使用带 BOM 的编码。",
+      "target": "src/downloadCsv.ts",
+      "input": "已确认的编码要求",
+      "acceptance": [
+        "下载文件名与编码符合要求"
+      ],
+      "failure": "记录未通过的检查与证据；在预算内自动修复，超出预算时停下并说明原因。",
+      "dependsOn": [
+        "a-bom"
+      ],
+      "agentId": "export"
+    }
+  ]
+}

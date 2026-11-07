@@ -1,6 +1,6 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "arborun",
-  "version": "0.2.0",
+  "version": "0.2.3",
   "description": "编辑、批准并跟踪 Agent 的决策执行树，完成后逐节点验收"
 }

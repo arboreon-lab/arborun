@@ -1,20 +1,34 @@
 ```text
 Arborun
-├─ 当前主线：MCP 0.2.0
+├─ 当前主线：MCP 0.2.3
 │  ├─ 接入现有 Agent 工具，以可编辑的树组织计划、执行过程与结果验收。
 │  ├─ 宿主负责理解上下文、调用工具、创建 Agent；Arborun 负责树与协作状态。
 │  ├─ Codex 桌面端优先；标准 MCP 工具和 MCP Apps UI 保持可移植。
 │  └─ 原独立桌面原型保留，说明见 docs/desktop-mvp.md；不是本轮默认入口。
 ├─ 使用流程
-│  ├─ 用户输入 → 宿主结合上下文调用 arborun_plan。
+│  ├─ 用户输入 → Codex 在正常对话中问清要求 → 宿主结合上下文调用 arborun_plan。
 │  ├─ 用户直接改节点、层级、依赖和条件，或让 AI 修改；更新后产生新版本。
 │  ├─ 用户批准当前版本 → 宿主读取批准并逐节点领取、执行和上报。
-│  ├─ 树显示 Agent 位置、问题、通过条件、证据和结果。
+│  ├─ 树显示 Agent 实际位置、当前动作、双向消息、检查依据和结果。
 │  └─ 全部完成 → arborun_submit 生成验收树 → 用户验收或要求修改。
+├─ 树形画布
+│  ├─ 以验收者的视角组织：主干是根的子节点，按先后连成路径，末端固定为用户验收。
+│  ├─ 效果（kind=result）下并排列出测试；Agent 的实现步骤默认收起为“Agent 工作”。
+│  ├─ 测试标明“你设定”或“Agent 补充”；用户设定的测试不能被 Agent 更新修改或删除。
+│  ├─ 进度按测试计数；失败测试在预算内由 Agent 自动修复，界面说明无需用户处理。
+│  ├─ 黑底、米白手绘线条与手写字体；字体子集与 rough.js 均内联，不访问外部资源。
+│  ├─ 无限画布：6%–800% 缩放，远景只显示标题；单击详情，双击进入任意节点。
+│  ├─ 卡片可拖动，只改布局不改关系；悬停高亮从主干起点到该节点的路径。
+│  ├─ 在 Codex 侧栏显示（preferredModelDisplayMode=fullscreen）；可折叠为概览。
+│  │  └─ 概览：任务状态、测试进度、效果链（末端为用户验收）、Agent 当前动作；点击效果即展开定位。
+│  ├─ 右上角只有两个图标：折叠为概览与 View（从上到下／从左到右）。
+│  └─ 设计与验证记录：docs/result-centred-canvas.md。
 ├─ 本地运行
 │  ├─ 环境：Node.js 22 或更新版本、pnpm 10。
 │  ├─ 安装：pnpm install --frozen-lockfile
 │  ├─ 构建：pnpm build:mcp
+│  │  └─ 本目录登记为插件市场时，构建后自动卸载并重新安装 arborun@arborun；重启 Codex 生效。
+│  │     └─ CI 或 ARBORUN_SKIP_CODEX_INSTALL=1 时跳过；没有 codex 命令或未登记本地市场时也跳过。
 │  ├─ MCP 启动：pnpm start:mcp
 │  │  ├─ stdout 专用于 stdio MCP；诊断与预览地址写入 stderr。
 │  │  └─ 将 dist-mcp/index.mjs 配置为宿主的 Node stdio 服务。
@@ -23,12 +37,20 @@ Arborun
 │  │  └─ 示例不会自动执行；浏览器本身不是模型宿主。
 │  └─ 预览数据与真实宿主数据分别保存。
 ├─ Codex 接入
-│  ├─ 插件包：plugins/arborun；构建命令会复制完整运行文件。
-│  ├─ 登记本地目录：codex plugin marketplace add /absolute/path/to/arborun
-│  ├─ 安装：codex plugin add arborun@arborun-local
+│  ├─ 一行安装（需要 Node.js 22+）：
+│  │  └─ codex plugin marketplace add arboreon-lab/arborun && codex plugin add arborun@arborun
+│  ├─ 插件包：plugins/arborun；构建命令会复制完整运行文件，构建产物随仓库提交。
+│  ├─ Codex 清单：plugins/arborun/.codex-plugin/plugin.json（显示名、简介、图标、示例提示）。
+│  │  └─ 图标：plugins/arborun/assets/logo.png，由 scripts/build-plugin-icon.mjs 以手绘风格生成。
+│  ├─ 本地开发：codex plugin marketplace add /absolute/path/to/arborun，再 codex plugin add arborun@arborun
 │  ├─ 按宿主要求刷新／重启后，在会话中启用 Arborun。
 │  ├─ 用法：使用 Arborun，把这个任务先规划为可编辑执行树，等我批准再执行。
 │  └─ 详细接入、官方依据和原生验收步骤：docs/mcp-hosts.md。
+├─ 协作事件
+│  ├─ arborun_activity 记录 action、message_sent、message_received。
+│  ├─ 发送与接收分别认证；绑定当前批准版本、有效执行与领取凭证。
+│  ├─ Codex 对话正常输出；活动通道只返回简短确认，树同步可观察过程。
+│  └─ 澄清门控与真实子 Agent 验证见 docs/collaboration-verification.md。
 ├─ 核心约束
 │  ├─ 未批准或旧版本不得领取；模型工具没有 approve/accept 参数。
 │  ├─ 用户动作使用 app-only 工具与 UI capability；依赖宿主正确隔离界面和模型。
@@ -55,8 +77,9 @@ Arborun
 │  ├─ pnpm typecheck
 │  ├─ pnpm test：原有引擎及新增 MCP 核心／传输测试。
 │  ├─ pnpm build:mcp && node scripts/check-mcp.mjs：打包产物真实 stdio 闭环。
-│  └─ pnpm test:mcp-ui：浏览器编辑、运行位置、失败重试、验收与并发修改测试。
-│     └─ 本机已有 Chrome 时可用 ARBORUN_TEST_BROWSER_CHANNEL=chrome。
+│  ├─ pnpm test:mcp-ui：浏览器编辑、运行位置、失败重试、验收与并发修改测试。
+│  │  └─ 本轮已更新测试用例，界面由 CUA 实测；未运行该 Playwright 命令。
+│  └─ node scripts/preview-mcp-app.mjs：官方 AppBridge 的隔离测试宿主；不是 Codex 原生面板。
 ├─ 代码
 │  ├─ src/mcp：独立协议状态机、服务、持久化和 stdio 入口。
 │  ├─ src/mcp-ui：嵌入式单树界面与 MCP Apps 桥接。

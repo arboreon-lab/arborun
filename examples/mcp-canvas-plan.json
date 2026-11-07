@@ -1,0 +1,405 @@
+{
+  "title": "CSV 导出修复 · 画布测试数据",
+  "goal": "修复中文、引号和换行导出问题，验证目标 Excel 环境，并在原树中交付可核对的结果。",
+  "context": [
+    "仅供 MCP 画布集成验证；业务动作和执行回报是隔离测试数据，不代表真实 CSV 文件修改。"
+  ],
+  "agents": [
+    {
+      "id": "main",
+      "name": "主 Agent",
+      "role": "需求与决策、检查采用及最终交付",
+      "scope": "示例需求、决策与交付记录",
+      "budget": "本示例不执行任何外部操作"
+    },
+    {
+      "id": "export",
+      "name": "实现 Agent",
+      "role": "CSV 序列化、转义和编码实现",
+      "scope": "示例工作区 src/exportCsv.ts、src/downloadCsv.ts 与对应测试",
+      "budget": "批准范围内的实现与两轮定向回归",
+      "parentId": "main"
+    },
+    {
+      "id": "compat",
+      "name": "兼容性 Agent",
+      "role": "Excel 环境与编码兼容性核验",
+      "scope": "示例 CSV 样本和兼容性记录",
+      "budget": "批准范围内的目标环境与两轮样本核验",
+      "parentId": "main"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "root",
+      "parentId": null,
+      "kind": "group",
+      "title": "CSV 导出修复",
+      "action": "",
+      "target": "",
+      "input": "",
+      "acceptance": [],
+      "failure": "",
+      "dependsOn": [],
+      "agentId": "main"
+    },
+    {
+      "id": "requirements",
+      "parentId": "root",
+      "kind": "group",
+      "title": "核对需求与样本",
+      "action": "",
+      "target": "",
+      "input": "",
+      "acceptance": [],
+      "failure": "",
+      "dependsOn": [],
+      "agentId": "main"
+    },
+    {
+      "id": "req-read",
+      "parentId": "requirements",
+      "kind": "action",
+      "title": "读取导出需求",
+      "action": "逐项读取编码、分隔符和换行要求，保留原文引用。",
+      "target": "示例需求.md、示例接口说明.md",
+      "input": "设计评审用的两份示例资料",
+      "acceptance": [
+        "两份资料的编码要求均有引用",
+        "区分用户约束与实现假设"
+      ],
+      "failure": "记录未通过的检查与证据，停止依赖此结果的节点；由主 Agent 更新修正计划后重新等待用户批准。",
+      "dependsOn": [],
+      "agentId": "main"
+    },
+    {
+      "id": "req-contract",
+      "parentId": "requirements",
+      "kind": "action",
+      "title": "确认输出约定",
+      "action": "确认字段顺序、CSV 转义规则及默认 UTF-8 输出，标注 Excel 的兼容性待验证。",
+      "target": "示例工作区 docs/export-contract.md",
+      "input": "读取导出需求的结果",
+      "acceptance": [
+        "必需字段、转义、换行约定明确"
+      ],
+      "failure": "记录未通过的检查与证据，停止依赖此结果的节点；由主 Agent 更新修正计划后重新等待用户批准。",
+      "dependsOn": [
+        "req-read"
+      ],
+      "agentId": "main"
+    },
+    {
+      "id": "req-fixtures",
+      "parentId": "requirements",
+      "kind": "action",
+      "title": "准备边界样本",
+      "action": "准备中文、引号、逗号、换行和空值样本，用同一份样本贯穿实现与验收。",
+      "target": "示例工作区 tests/fixtures/csv/",
+      "input": "已确认的输出约定",
+      "acceptance": [
+        "五类边界样本均有预期输出"
+      ],
+      "failure": "记录未通过的检查与证据，停止依赖此结果的节点；由主 Agent 更新修正计划后重新等待用户批准。",
+      "dependsOn": [
+        "req-contract"
+      ],
+      "agentId": "main"
+    },
+    {
+      "id": "implementation",
+      "parentId": "root",
+      "kind": "group",
+      "title": "修复导出实现",
+      "action": "",
+      "target": "",
+      "input": "",
+      "acceptance": [],
+      "failure": "",
+      "dependsOn": [],
+      "agentId": "main"
+    },
+    {
+      "id": "impl-serialize",
+      "parentId": "implementation",
+      "kind": "action",
+      "title": "调整字段序列化",
+      "action": "修改 serializeRows，按约定字段顺序输出并保留空值位置。",
+      "target": "示例工作区 src/exportCsv.ts",
+      "input": "输出约定与边界样本",
+      "acceptance": [
+        "字段顺序与约定一致",
+        "空值不会导致列错位"
+      ],
+      "failure": "记录未通过的检查与证据，停止依赖此结果的节点；由主 Agent 更新修正计划后重新等待用户批准。",
+      "dependsOn": [
+        "req-fixtures"
+      ],
+      "agentId": "export"
+    },
+    {
+      "id": "impl-escape",
+      "parentId": "implementation",
+      "kind": "action",
+      "title": "处理引号与换行",
+      "action": "修改 escapeCell，按 CSV 规则包裹含逗号或换行的字段，并将内部引号成对转义。",
+      "target": "示例工作区 src/exportCsv.ts",
+      "input": "序列化函数与边界样本",
+      "acceptance": [
+        "引号、逗号、换行样本均匹配预期输出"
+      ],
+      "failure": "记录未通过的检查与证据，停止依赖此结果的节点；由主 Agent 更新修正计划后重新等待用户批准。",
+      "dependsOn": [
+        "impl-serialize"
+      ],
+      "agentId": "export"
+    },
+    {
+      "id": "impl-encoding",
+      "parentId": "implementation",
+      "kind": "action",
+      "title": "落实编码策略",
+      "action": "依据兼容性分支结果实现 UTF-8 导出与按约定添加 BOM 的下载入口。",
+      "target": "示例工作区 src/downloadCsv.ts",
+      "input": "兼容性 Agent 的已核对结论",
+      "acceptance": [
+        "编码字节与兼容性结论一致",
+        "现有接口参数保持兼容"
+      ],
+      "failure": "记录未通过的检查与证据，停止依赖此结果的节点；由主 Agent 更新修正计划后重新等待用户批准。",
+      "dependsOn": [
+        "compat-check"
+      ],
+      "agentId": "export"
+    },
+    {
+      "id": "impl-regression",
+      "parentId": "implementation",
+      "kind": "action",
+      "title": "运行导出回归",
+      "action": "针对修改后的序列化、转义与下载入口运行同一组样本回归。",
+      "target": "示例工作区 tests/exportCsv.test.ts",
+      "input": "三个实现节点的结果",
+      "acceptance": [
+        "全部边界样本通过且无新增回归"
+      ],
+      "failure": "记录未通过的检查与证据，停止依赖此结果的节点；由主 Agent 更新修正计划后重新等待用户批准。",
+      "dependsOn": [
+        "impl-escape",
+        "impl-encoding"
+      ],
+      "agentId": "export"
+    },
+    {
+      "id": "compatibility",
+      "parentId": "root",
+      "kind": "group",
+      "title": "验证 Excel 兼容性",
+      "action": "",
+      "target": "",
+      "input": "",
+      "acceptance": [],
+      "failure": "",
+      "dependsOn": [],
+      "agentId": "main"
+    },
+    {
+      "id": "compat-baseline",
+      "parentId": "compatibility",
+      "kind": "action",
+      "title": "核对目标环境",
+      "action": "核对需要覆盖的 Excel 版本、系统和导入方式，指出资料中缺失的版本信息。",
+      "target": "示例工作区 docs/client-matrix.md",
+      "input": "需求资料与兼容性样本",
+      "acceptance": [
+        "目标环境与缺失信息已列明"
+      ],
+      "failure": "记录未通过的检查与证据，停止依赖此结果的节点；由主 Agent 更新修正计划后重新等待用户批准。",
+      "dependsOn": [
+        "req-fixtures"
+      ],
+      "agentId": "compat"
+    },
+    {
+      "id": "compat-excel",
+      "parentId": "compatibility",
+      "kind": "action",
+      "title": "复核中文导入",
+      "action": "使用相同样本比较直接打开和导入向导两种读取方式，记录字符与列布局。",
+      "target": "示例样本 exports/chinese.csv",
+      "input": "目标环境清单与 CSV 样本",
+      "acceptance": [
+        "两种读取方式都有可核对记录"
+      ],
+      "failure": "记录未通过的检查与证据，停止依赖此结果的节点；由主 Agent 更新修正计划后重新等待用户批准。",
+      "dependsOn": [
+        "compat-baseline"
+      ],
+      "agentId": "compat"
+    },
+    {
+      "id": "compat-bom",
+      "parentId": "compatibility",
+      "kind": "condition",
+      "title": "是否必须添加 BOM",
+      "action": "结合目标环境和样本结果判断默认下载是否需要 BOM；缺少依据时保持未知。",
+      "target": "Excel 兼容性决策",
+      "input": "需求约束、目标环境与导入记录",
+      "acceptance": [
+        "判断由明确环境和样本结果支持"
+      ],
+      "failure": "如果 Excel 版本或导入方式仍未知，标记阻塞并请求补充；不得把 unknown 当成 false。",
+      "dependsOn": [
+        "compat-baseline"
+      ],
+      "agentId": "main"
+    },
+    {
+      "id": "compat-with-bom",
+      "parentId": "compatibility",
+      "kind": "action",
+      "title": "验证带 BOM 输出",
+      "action": "在需要 BOM 的环境中验证 UTF-8 BOM 样本的中文、引号和列边界。",
+      "target": "示例样本 exports/utf8-bom.csv",
+      "input": "条件成立与中文导入记录",
+      "acceptance": [
+        "带 BOM 的样本在目标环境中读取正确"
+      ],
+      "failure": "记录未通过的检查与证据，停止依赖此结果的节点；由主 Agent 更新修正计划后重新等待用户批准。",
+      "dependsOn": [
+        "compat-excel"
+      ],
+      "when": {
+        "nodeId": "compat-bom",
+        "outcome": true
+      },
+      "agentId": "compat"
+    },
+    {
+      "id": "compat-without-bom",
+      "parentId": "compatibility",
+      "kind": "action",
+      "title": "验证纯 UTF-8 输出",
+      "action": "当目标环境不要求 BOM 时，验证纯 UTF-8 样本并记录适用范围。",
+      "target": "示例样本 exports/utf8.csv",
+      "input": "条件不成立与中文导入记录",
+      "acceptance": [
+        "纯 UTF-8 的样本在目标环境中读取正确"
+      ],
+      "failure": "记录未通过的检查与证据，停止依赖此结果的节点；由主 Agent 更新修正计划后重新等待用户批准。",
+      "dependsOn": [
+        "compat-excel"
+      ],
+      "when": {
+        "nodeId": "compat-bom",
+        "outcome": false
+      },
+      "agentId": "compat"
+    },
+    {
+      "id": "compat-check",
+      "parentId": "compatibility",
+      "kind": "action",
+      "title": "检查并采用兼容结论",
+      "action": "核对兼容性 Agent 的样本记录，明确采用的编码策略及不适用分支。",
+      "target": "示例工作区 docs/csv-compatibility.md",
+      "input": "两条互斥分支与中文导入记录",
+      "acceptance": [
+        "采用结论与实际触发分支一致",
+        "保留环境、样本和判断依据"
+      ],
+      "failure": "记录未通过的检查与证据，停止依赖此结果的节点；由主 Agent 更新修正计划后重新等待用户批准。",
+      "dependsOn": [
+        "compat-excel",
+        "compat-with-bom",
+        "compat-without-bom"
+      ],
+      "agentId": "main"
+    },
+    {
+      "id": "delivery",
+      "parentId": "root",
+      "kind": "group",
+      "title": "回归与交付",
+      "action": "",
+      "target": "",
+      "input": "",
+      "acceptance": [],
+      "failure": "",
+      "dependsOn": [],
+      "agentId": "main"
+    },
+    {
+      "id": "verify-unit",
+      "parentId": "delivery",
+      "kind": "action",
+      "title": "复核自动化检查",
+      "action": "检查导出回归的命令、退出状态和通过项目，不仅引用完成声明。",
+      "target": "示例工作区测试结果",
+      "input": "实现 Agent 的回归结果",
+      "acceptance": [
+        "每项验收条件均有检查记录"
+      ],
+      "failure": "记录未通过的检查与证据，停止依赖此结果的节点；由主 Agent 更新修正计划后重新等待用户批准。",
+      "dependsOn": [
+        "impl-regression"
+      ],
+      "agentId": "main"
+    },
+    {
+      "id": "verify-matrix",
+      "parentId": "delivery",
+      "kind": "action",
+      "title": "复核跨环境结果",
+      "action": "交叉检查实现结果与目标环境清单，标注已验证与未覆盖环境。",
+      "target": "示例工作区 docs/client-matrix.md",
+      "input": "实现回归与兼容结论",
+      "acceptance": [
+        "环境覆盖范围明确",
+        "未覆盖项未被标注为通过"
+      ],
+      "failure": "记录未通过的检查与证据，停止依赖此结果的节点；由主 Agent 更新修正计划后重新等待用户批准。",
+      "dependsOn": [
+        "impl-regression",
+        "compat-check"
+      ],
+      "agentId": "compat"
+    },
+    {
+      "id": "deliver-artifacts",
+      "parentId": "delivery",
+      "kind": "action",
+      "title": "整理产物与证据",
+      "action": "整理修改摘要、CSV 样本、检查记录与兼容说明，并关联原节点身份。",
+      "target": "示例交付目录 delivery/csv/",
+      "input": "自动化检查与跨环境结果",
+      "acceptance": [
+        "每个成果可回溯到执行节点"
+      ],
+      "failure": "记录未通过的检查与证据，停止依赖此结果的节点；由主 Agent 更新修正计划后重新等待用户批准。",
+      "dependsOn": [
+        "verify-unit",
+        "verify-matrix"
+      ],
+      "agentId": "main"
+    },
+    {
+      "id": "deliver-summary",
+      "parentId": "delivery",
+      "kind": "action",
+      "title": "提交同树验收",
+      "action": "核对所有适用节点的结果和依据，将原执行树提交用户验收。",
+      "target": "本任务结果树",
+      "input": "成果索引与原执行树",
+      "acceptance": [
+        "所有适用节点完成",
+        "用户验收尚未代为通过"
+      ],
+      "failure": "记录未通过的检查与证据，停止依赖此结果的节点；由主 Agent 更新修正计划后重新等待用户批准。",
+      "dependsOn": [
+        "deliver-artifacts"
+      ],
+      "agentId": "main"
+    }
+  ]
+}

@@ -78,7 +78,7 @@ describe('Arborun MCP transport and persistence boundary', () => {
     const { client, call } = await connection();
     const { tools } = await client.listTools();
     expect(tools.map(tool => tool.name).sort()).toEqual([
-      'arborun_claim', 'arborun_plan', 'arborun_read', 'arborun_report', 'arborun_submit', 'arborun_user',
+      'arborun_activity', 'arborun_claim', 'arborun_plan', 'arborun_read', 'arborun_report', 'arborun_submit', 'arborun_user',
     ]);
     const read = tools.find(tool => tool.name === 'arborun_read')!;
     expect(read._meta).toMatchObject({

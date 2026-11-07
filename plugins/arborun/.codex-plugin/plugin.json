@@ -1,0 +1,25 @@
+{
+  "name": "arborun",
+  "version": "0.2.3",
+  "description": "编辑、批准并跟踪 Agent 的决策执行树，完成后逐节点验收",
+  "author": { "name": "Arboreon Lab" },
+  "keywords": ["execution-tree", "planning", "acceptance", "mcp-app"],
+  "mcpServers": "./mcp.json",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Arborun",
+    "shortDescription": "把任务规划成可编辑、可验收的执行树",
+    "longDescription": "先在对话中问清要求，再把任务规划成以效果和测试为中心的执行树；你修改并批准后，Agent 按树执行，过程、证据和多 Agent 协作都在同一棵树上，最后逐项验收。",
+    "developerName": "Arboreon Lab",
+    "category": "Productivity",
+    "capabilities": ["Read", "Write", "Interactive"],
+    "defaultPrompt": [
+      "使用 Arborun，把这个任务先规划为可编辑执行树，等我批准再执行。",
+      "用 Arborun 打开当前任务的执行树。",
+      "按 Arborun 执行树继续执行，并在完成后提交验收。"
+    ],
+    "brandColor": "#0d0d0b",
+    "composerIcon": "./assets/logo.png",
+    "logo": "./assets/logo.png"
+  }
+}

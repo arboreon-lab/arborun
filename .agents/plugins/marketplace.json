@@ -1,10 +1,20 @@
 {
-  "name": "arborun-local",
-  "interface": { "displayName": "Arborun" },
-  "plugins": [{
-    "name": "arborun",
-    "source": { "source": "local", "path": "./plugins/arborun" },
-    "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
-    "category": "Productivity"
-  }]
+  "name": "arborun",
+  "interface": {
+    "displayName": "Arborun"
+  },
+  "plugins": [
+    {
+      "name": "arborun",
+      "source": {
+        "source": "local",
+        "path": "./plugins/arborun"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
 }

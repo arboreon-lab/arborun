@@ -1,4 +1,19 @@
 ```text
+当前版本
+└─ MCP 0.2.3 的清理、澄清与真实协作见 docs/collaboration-verification.md；以下保留历史记录。
+```
+
+```text
+当前版本
+└─ MCP 0.2.2 参考图迭代见 docs/canvas-reference-redesign.md；以下保留历史验证记录。
+```
+
+```text
+当前迭代
+└─ MCP 0.2.1 画布实现、88 项测试、CUA 与 SDK 宿主实测见 docs/canvas-verification.md。
+```
+
+```text
 Arborun MCP 0.2.0｜验证记录
 ├─ 环境
 │  ├─ 2026-11-04，macOS Apple Silicon。
