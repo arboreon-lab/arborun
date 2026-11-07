@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import type { AttemptView, NodeState, Session } from '../src/mcp/schema';
 import {
-  ACCEPT_ID, activeAttempts, agentColor, agentProgress, applyOffsets, buildView, counts, fitCamera, initialExpanded, layoutTree, stateLabel, visibleCard, workId, zoomCamera, ZOOM_MAX, ZOOM_MIN, type TreeView,
+  ACCEPT_ID, activeAttempts, agentColor, agentProgress, taskEnds, applyOffsets, buildView, counts, fitCamera, initialExpanded, layoutTree, stateLabel, visibleCard, workId, zoomCamera, ZOOM_MAX, ZOOM_MIN, type TreeView,
 } from '../src/mcp-ui/canvas-model';
 
 const node = (id: string, parentId: string | null, kind: NodeState['kind'] = 'action', overrides: Partial<NodeState> = {}): NodeState => ({
@@ -116,5 +116,15 @@ describe('view-only geometry', () => {
     expect(agentColor(s, 'main')).toBe('var(--agent-0)');
     expect(agentColor(s, 'compat')).toBe('var(--agent-1)');
     expect(agentColor(s, 'export')).toBe('var(--agent-2)');
+  });
+
+  test('the start node spans the whole path: input from the first stage, output from the last unless the root says otherwise', () => {
+    const nodes = plan().map(n => n.id === 'root' ? { ...n, input: '' } : n.id === 'samples' ? { ...n, input: '原始数据' } : n.id === 'effects' ? { ...n, output: '三项效果都达成' } : n);
+    const s = session(nodes);
+    expect(taskEnds(s)).toMatchObject({ input: '原始数据', output: '三项效果都达成' });
+    expect(taskEnds(s).stages.map(n => n.id)).toEqual(['samples', 'effects']);
+    const own = session(nodes.map(n => n.id === 'root' ? { ...n, input: '整个任务的起点', output: '整个任务的交付' } : n));
+    expect(taskEnds(own)).toMatchObject({ input: '整个任务的起点', output: '整个任务的交付' });
+    expect(taskEnds(session([node('root', null, 'group')])).output).toBe('测试目标');
   });
 });

@@ -2,7 +2,7 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 're
 import type { Session } from '../mcp/schema';
 import {
   ACCEPT_ID, CARD_H, CARD_W, FRAME_HEAD, RING_GAP, RING_W, activeAttempts, agentColor, agentProgress, aggregateStatus, applyOffsets, buildView, counts, fitCamera, initialExpanded,
-  isFolder, layoutTree, stateLabel, viewDescendants, visibleCard, zoomCamera, type Camera, type Counts, type Point, type TreeView, type ViewNode,
+  isFolder, layoutTree, stateLabel, taskEnds, viewDescendants, visibleCard, zoomCamera, type Camera, type Counts, type Point, type TreeView, type ViewNode,
 } from './canvas-model';
 import { collaborationMessages, currentWork } from './collaboration-model';
 import { SKETCH_M, bez, cardMarkup, edgeMarkup, frameMarkup, glyphMarkup, messageCurve, messageMarkup, ringMarkup, type CardLook, type RingSegment } from './sketch';
@@ -347,7 +347,8 @@ export function TreeCanvas({ session, selectedId, onSelect, onEnter, editing = f
     const progress = agentProgress(session, view, id), owned = progress.reduce((t, a) => t + a.total, 0);
     const ring: RingSegment[] = progress.map(a => ({ agentId: a.agentId, color: agentVar(a.agentId), share: a.total / owned, done: a.done / a.total, running: a.running > 0 }));
     const c = counts(session, view, v.kind === 'accept' ? ACCEPT_ID : id);
-    const text = isRoot ? session.goal : v.kind === 'accept' ? '逐项查看每个效果的测试与证据；全部通过后验收。' : v.kind === 'work' ? `${v.children.length} 个步骤` : n?.action ?? '';
+    const ends = isRoot ? taskEnds(session) : undefined;
+    const text = ends ? (ends.input ? `${ends.input} → ${ends.output}` : ends.output) : v.kind === 'accept' ? '逐项查看每个效果的测试与证据；全部通过后验收。' : v.kind === 'work' ? `${v.children.length} 个步骤` : n?.action ?? '';
     const label = stateLabel(session, view, id);
     let meta: React.ReactNode = null;
     if (isFolder(v) || isRoot || v.kind === 'accept') meta = c.total > 0 && <span className="meta">{c.passed + c.skipped}/{c.total}</span>;

@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { CaseResult, NodeSpec, NodeState, Proof, Session, TestCase } from '../mcp/schema';
-import { ACCEPT_ID, activeAttempts, agentColor, aggregateStatus, buildView, counts, isContainer, stateLabel, viewDescendants, type ViewNode } from './canvas-model';
+import { ACCEPT_ID, activeAttempts, agentColor, aggregateStatus, buildView, taskEnds, counts, isContainer, stateLabel, viewDescendants, type ViewNode } from './canvas-model';
 import { currentWork, nodeActivities } from './collaboration-model';
 import { deletionImpact, nodeSpecification, previewImpact, subtreeIds } from './inspector-model';
 import { Avatar, Glyph, MiniBar } from './TreeCanvas';
@@ -241,6 +241,18 @@ function Describe({ node, view, onLocate, fallback }: { node: NodeState; view: M
 }
 const Outcome = ({ node }: { node: NodeState }) => node.result ? <Section><div className={`callout ${node.status === 'failed' ? 'fail' : node.status === 'passed' ? 'pass' : ''}`}><p>{node.result}</p></div></Section> : null;
 
+/** Every node reads the same way: 描述 on top, 输入 → 输出 side by side, 测试 below. */
+function Parts({ describe, input, output, tests }: { describe: ReactNode; input: ReactNode; output: ReactNode; tests: ReactNode }) {
+  return <>
+    <section className="panel-section part part-describe" aria-label="描述"><h3>描述</h3>{describe}</section>
+    <section className="panel-section part part-io" aria-label="输入与输出">
+      <div className="io io-in"><h3>输入</h3>{input}</div>
+      <span className="io-arrow" aria-hidden="true">→</span>
+      <div className="io io-out"><h3>输出</h3>{output}</div>
+    </section>
+    <section className="panel-section part part-tests" aria-label="测试"><h3>测试</h3>{tests}</section>
+  </>;
+}
 /** Every node reads the same way: 输入, 输出, 描述, 测试. */
 function Details(props: NodeInspectorProps & { node: NodeState; view: Map<string, ViewNode> }) {
   const { node, session, view, onLocate } = props;
@@ -251,34 +263,38 @@ function Details(props: NodeInspectorProps & { node: NodeState; view: Map<string
   const samples = <Samples node={node} onGenerateCases={props.onGenerateCases} busy={props.busy} />;
 
   if (node.parentId === null) {
-    const stages = kids.filter(id => id !== ACCEPT_ID), results = session.nodes.filter(n => n.kind === 'result');
+    // The start node stands for the whole path: its input is where the task begins, its output what reaches acceptance.
+    const ends = taskEnds(session), stages = kids.filter(id => id !== ACCEPT_ID), results = session.nodes.filter(n => n.kind === 'result');
     return <>
       {props.taskActions && <Section><div className="decision">{props.taskActions}</div></Section>}
-      <Section title="输入">{node.input && <p>{node.input}</p>}
-        {!!session.clarifications?.length && <dl className="qa">{session.clarifications.map((item, index) => <div key={index}><dt>{item.question}</dt><dd>{item.answer}</dd></div>)}</dl>}
-        {!node.input && !session.clarifications?.length && <Unfilled />}
-        {!!session.context.length && <details className="fold"><summary>依据的资料（{session.context.length}）</summary><ul>{session.context.map((item, i) => <li key={i}>{item}</li>)}</ul></details>}</Section>
-      <Section title="输出"><p>{node.output || session.goal}</p></Section>
-      <Section title="描述"><Describe node={node} view={view} onLocate={onLocate} fallback={node.action} />
-        <p className="note">分 {stages.length} 步完成：</p><Links session={session} view={view} ids={stages} onLocate={onLocate} />
-        <details className="fold"><summary>Agent 分工（{session.agents.length}）</summary><ul className="agents">{session.agents.map(a => <li key={a.id}><Avatar session={session} agentId={a.id} /><div><strong>{a.name}</strong> · {a.role}<p>负责：{a.scope}</p><p>上限：{a.budget}</p></div></li>)}</ul></details></Section>
-      <Section title="测试">{results.length ? results.map(r => <div key={r.id} className="accept-item"><h4><button type="button" className="link-plain" onClick={() => onLocate(r.id)}><Glyph session={session} view={view} id={r.id} size={14} />{r.title}</button></h4>
-        <TestRows session={session} view={view} ids={testsUnder(r.id)} onLocate={onLocate} /></div>) : <TestRows session={session} view={view} ids={testsUnder(node.id)} onLocate={onLocate} />}</Section>
+      <Parts
+        describe={<><Describe node={node} view={view} onLocate={onLocate} fallback={node.action || session.goal} />
+          <ol className="path" aria-label="从输入到输出">
+            <li className="end"><span>输入</span></li>
+            {stages.map(id => <li key={id}><button type="button" className="link-chip" onClick={() => onLocate(id)}><Glyph session={session} view={view} id={id} size={13} />{view.get(id)?.title ?? id}</button></li>)}
+            <li className="end"><span>输出 · 用户验收</span></li>
+          </ol>
+          {!!session.clarifications?.length && <details className="fold"><summary>已确认的要求（{session.clarifications.length}）</summary><dl className="qa">{session.clarifications.map((item, index) => <div key={index}><dt>{item.question}</dt><dd>{item.answer}</dd></div>)}</dl></details>}
+          <details className="fold"><summary>Agent 分工（{session.agents.length}）</summary><ul className="agents">{session.agents.map(a => <li key={a.id}><Avatar session={session} agentId={a.id} /><div><strong>{a.name}</strong> · {a.role}<p>负责：{a.scope}</p><p>上限：{a.budget}</p></div></li>)}</ul></details></>}
+        input={<>{ends.input ? <p>{ends.input}</p> : <Unfilled />}
+          {!!session.context.length && <details className="fold"><summary>依据的资料（{session.context.length}）</summary><ul>{session.context.map((item, i) => <li key={i}>{item}</li>)}</ul></details>}</>}
+        output={<><p>{ends.output}</p><p className="note">最后交给你验收</p></>}
+        tests={results.length ? results.map(r => <div key={r.id} className="accept-item"><h4><button type="button" className="link-plain" onClick={() => onLocate(r.id)}><Glyph session={session} view={view} id={r.id} size={14} />{r.title}</button></h4>
+          <TestRows session={session} view={view} ids={testsUnder(r.id)} onLocate={onLocate} /></div>) : <TestRows session={session} view={view} ids={testsUnder(node.id)} onLocate={onLocate} />} />
     </>;
   }
   if (isContainer(node)) {
     const result = node.kind === 'result', tests = result ? kids.filter(id => view.get(id)?.node?.kind === 'test') : testsUnder(node.id);
     const workId = kids.find(id => view.get(id)?.kind === 'work');
-    return <>
-      <Section title="输入">{node.input ? <p>{node.input}</p> : <Unfilled />}</Section>
-      <Section title="输出">{result ? <p>{node.action}</p> : node.output || node.action ? <p>{node.output || node.action}</p> : <Unfilled />}{result && node.output && <p>{node.output}</p>}</Section>
-      <Section title="描述"><Describe node={node} view={view} onLocate={onLocate} fallback={!result && node.output ? node.action : undefined} />
+    return <Parts
+      describe={<><Describe node={node} view={view} onLocate={onLocate} fallback={!result && node.output ? node.action : undefined} />
         {!result && <><p className="note">包含：</p><Links session={session} view={view} ids={kids} onLocate={onLocate} /></>}
-        {workId && <details className="fold"><summary>Agent 要做的步骤（{view.get(workId)!.children.length}）· {stateLabel(session, view, workId)}</summary><Links session={session} view={view} ids={view.get(workId)!.children} onLocate={onLocate} /></details>}</Section>
-      <Section title="测试">{tests.length ? <TestRows session={session} view={view} ids={tests} onLocate={onLocate} /> : <p className="note">这里还没有测试。</p>}
+        {workId && <details className="fold"><summary>Agent 要做的步骤（{view.get(workId)!.children.length}）· {stateLabel(session, view, workId)}</summary><Links session={session} view={view} ids={view.get(workId)!.children} onLocate={onLocate} /></details>}</>}
+      input={node.input ? <p>{node.input}</p> : <Unfilled />}
+      output={<>{result ? <p>{node.action}</p> : node.output || node.action ? <p>{node.output || node.action}</p> : <Unfilled />}{result && node.output && <p>{node.output}</p>}</>}
+      tests={<>{tests.length ? <TestRows session={session} view={view} ids={tests} onLocate={onLocate} /> : <p className="note">这里还没有测试。</p>}
         {result && !!tests.length && <p className="note">你设定的测试是验收标准；Agent 补充的只是额外检查。</p>}
-        {!!node.cases?.length && samples}</Section>
-    </>;
+        {!!node.cases?.length && samples}</>} />;
   }
   const isTest = node.kind === 'test';
   const result = isTest && view.get(node.parentId!)?.kind === 'result' ? node.parentId! : undefined;
@@ -286,14 +302,15 @@ function Details(props: NodeInspectorProps & { node: NodeState; view: Map<string
   return <>
     <Live session={session} nodeId={node.id} />
     <Outcome node={node} />
-    <Section title="输入"><p>{node.input}</p>{node.target && <p className="where"><span>在哪</span><span className="mono">{node.target}</span></p>}</Section>
-    <Section title="输出">{node.output && <p>{node.output}</p>}
-      {!!node.acceptance.length && <ul className="plain outcome">{node.acceptance.map((item, i) => <li key={i}>{item}</li>)}</ul>}
-      {node.conditionOutcome !== undefined && <p>结果：{node.conditionOutcome === 'unknown' ? '还不确定' : node.conditionOutcome ? '成立' : '不成立'}</p>}</Section>
-    <Section title="描述"><Describe node={node} view={view} onLocate={onLocate} fallback={node.action} />
-      {node.mapping && node.action && node.action !== node.mapping && <p className="note">{isTest ? '测试内容' : '具体动作'}：{node.action}</p>}</Section>
-    <Section title="测试">{samples}<OtherEvidence node={node} session={session} />
-      {(node.caseResults?.length || node.evidence?.length) ? <p className="note">以上由 Agent 提供，仍需你确认。</p> : null}</Section>
+    <Parts
+      describe={<><Describe node={node} view={view} onLocate={onLocate} fallback={node.action} />
+        {node.mapping && node.action && node.action !== node.mapping && node.action !== node.title && <p className="note">{isTest ? '测试内容' : '具体动作'}：{node.action}</p>}</>}
+      input={<><p>{node.input}</p>{node.target && <p className="where"><span>在哪</span><span className="mono">{node.target}</span></p>}</>}
+      output={<>{node.output && <p>{node.output}</p>}
+        {!!node.acceptance.length && <ul className="plain outcome">{node.acceptance.map((item, i) => <li key={i}>{item}</li>)}</ul>}
+        {node.conditionOutcome !== undefined && <p>结果：{node.conditionOutcome === 'unknown' ? '还不确定' : node.conditionOutcome ? '成立' : '不成立'}</p>}</>}
+      tests={<>{samples}<OtherEvidence node={node} session={session} />
+        {(node.caseResults?.length || node.evidence?.length) ? <p className="note">以上由 Agent 提供，仍需你确认。</p> : null}</>} />
     {fixing && <Section title="处理"><p>Agent 正在自动修复，你不用处理：</p><Live session={session} nodeId={fixing.nodeId} /><Links session={session} view={view} ids={[fixing.nodeId]} onLocate={onLocate} /></Section>}
     {result && <Section title="所属效果"><Links session={session} view={view} ids={[result]} onLocate={onLocate} /></Section>}
     <Messages session={session} nodeId={node.id} />
@@ -350,6 +367,7 @@ export function NodeInspector(props: NodeInspectorProps) {
     const results = session.nodes.filter(n => n.kind === 'result');
     const reviewing = session.status === 'review';
     return <Shell session={session} view={view} id={ACCEPT_ID} title="用户验收" status={status(ACCEPT_ID)} onClose={onClose} busy={busy} foot={props.taskActions}>
+      <Section title="要交付"><p>{taskEnds(session).output}</p></Section>
       <Section><p>逐项查看每个效果的测试与证据。{reviewing ? '某一项不满意时，只退回这一项。' : 'Agent 全部完成并提交验收后，这里才能验收。'}</p></Section>
       {results.map(r => { const tests = (view.get(r.id)?.children ?? []).filter(id => view.get(id)?.node?.kind === 'test'); return <section key={r.id} className="panel-section accept-item">
         <h3><button type="button" className="link-plain" onClick={() => onLocate(r.id)}><Glyph session={session} view={view} id={r.id} size={15} />{r.title}</button></h3>

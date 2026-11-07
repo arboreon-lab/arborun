@@ -30,6 +30,9 @@ Arborun｜宿主工作流
 │  │  └─ 实现该效果的 kind=action 步骤也放在此 result 下，界面默认收起为“Agent 工作”。
 │  ├─ 需要拍板的决定在提问阶段确认，不在树里放“待决定”节点。
 │  ├─ 所有节点（含 root、result）都按四部分写：输入 input、输出 output、描述 mapping＋constraints、测试。
+│  ├─ root 代表从起点到终点的整条路径：
+│  │  ├─ root.input 是整个任务的起点（第一阶段从它开始），root.output 是最后交给用户验收的东西（最后一阶段产出它）。
+│  │  └─ 中间每个阶段的输入是前面阶段的产出，首尾相接。
 │  ├─ 每个测试与步骤另写对象 target、通过条件 acceptance 和失败路径 failure。
 │  └─ 每个测试与步骤还要写清：
 │     ├─ output：产出什么；mapping：一两句话说明输入如何变成输出；constraints：要注意的限制。

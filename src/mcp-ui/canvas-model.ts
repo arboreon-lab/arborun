@@ -156,6 +156,21 @@ export function aggregateStatus(session: Session, view: Map<string, ViewNode>, i
   return session.status === 'draft' ? 'draft' : 'ready';
 }
 
+/**
+ * The two ends of the whole task, which the start node stands for: what goes in at the first stage and what reaches
+ * user acceptance after the last. The root's own fields win; otherwise the first and last stages supply them.
+ */
+export function taskEnds(session: Session): { input: string; output: string; stages: NodeState[] } {
+  const root = session.nodes.find(n => n.parentId === null);
+  const stages = root ? session.nodes.filter(n => n.parentId === root.id) : [];
+  const last = stages.at(-1);
+  return {
+    input: root?.input || stages[0]?.input || '',
+    output: root?.output || (last ? last.output || (last.kind === 'result' ? last.action : '') : '') || session.goal,
+    stages,
+  };
+}
+
 export function stateLabel(session: Session, view: Map<string, ViewNode>, id: string): string {
   const v = view.get(id)!, s = aggregateStatus(session, view, id), n = v.node;
   if (v.kind === 'accept') {

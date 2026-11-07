@@ -107,3 +107,23 @@ video.media { width: 100%; cursor: auto; }
 .editor h4.part:first-of-type { margin-top: 4px; }
 .cases-edit { border: 1.4px dashed var(--line-strong); border-radius: var(--wobble-2); padding: 8px 10px; display: grid; gap: 6px; }
 .cases-edit legend { color: var(--muted); font-size: 13.5px; padding: 0 4px; }
+
+/* The whole task as one path: input → stages → output at acceptance. */
+.path { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 2px; }
+.path li { display: inline-flex; align-items: center; }
+.path li + li::before { content: "→"; color: var(--faint); margin: 0 6px; }
+.path .end span { font-size: 13px; color: var(--muted); padding: 2px 8px; border: 1.2px dashed var(--line-strong); border-radius: var(--wobble-2); }
+
+/* Detail layout: 描述 centred on top, 输入 → 输出 side by side, 测试 centred below. */
+.part > h3 { text-align: center; }
+.part-describe { text-align: center; }
+.part-describe .rules, .part-describe .qa, .part-describe .agents, .part-describe .fold { text-align: left; }
+.part-describe .rules { display: inline-block; margin-left: auto; margin-right: auto; }
+.part-describe .path, .part-describe .links { justify-content: center; }
+.part-io { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 10px; align-items: start; }
+.part-io .io { min-width: 0; overflow-wrap: anywhere; }
+.part-io .io h3 { text-align: left; }
+.part-io .io-out { padding-left: 4px; border-left: 1.2px dashed var(--line); padding-left: 12px; }
+.part-io .io-in { padding-right: 2px; }
+.part-io .io-arrow { align-self: center; font-size: 22px; color: var(--muted); padding-top: 18px; }
+.part-io .where { flex-wrap: wrap; gap: 4px 8px; }
