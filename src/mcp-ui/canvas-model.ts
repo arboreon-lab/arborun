@@ -257,9 +257,9 @@ export function layoutTree(view: Map<string, ViewNode>, scope: string, treeView:
   return { pos, rects, lines: lines.map(l => ({ ...l, pts: l.pts.map(xy) })), trunk, scope };
 }
 
-/** Results and plain groups open by default; agent work stays folded. */
-export function initialExpanded(view: Map<string, ViewNode>, scope: string): Set<string> {
-  return new Set(viewDescendants(view, scope).filter(id => { const v = view.get(id); return isFolder(v) && v!.kind !== 'work'; }));
+/** Everything starts folded: the trunk alone, ending in acceptance. Entering or expanding a node opens it. */
+export function initialExpanded(_view: Map<string, ViewNode>, _scope: string): Set<string> {
+  return new Set();
 }
 
 /** Dragged cards keep their own offset; lines and frames follow, task relations never change. */

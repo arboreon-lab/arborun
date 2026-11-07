@@ -24,8 +24,10 @@ export function glyphMarkup(id: string, kind: GlyphKind, status: NodeState['stat
   if (status === 'blocked') return draw(shape(solid('var(--wait)')), mark([[8, 4.4], [8, 8.8]]), mark([[8, 11.2], [8.1, 11.6]], 'var(--bg)', 2.2));
   if (status === 'stale') return draw(shape(o('var(--wait)', { strokeLineDash: [2.4, 2] })), gen.arc(8, 8, 6.4, 6.4, -.4, 4.4, false, o('var(--wait)', { roughness: .4 })));
   if (status === 'skipped') return draw(shape(o('var(--faint)', { strokeLineDash: [2.2, 2] })), mark([[5, 11], [11, 5]], 'var(--faint)', 1.4));
-  if (status === 'running') return draw(shape(o('var(--line-strong)'))) + `<g class="spin">${draw(gen.arc(8, 8, 13.4, 13.4, -Math.PI / 2, 0, false, { stroke: options.agentColor ?? 'var(--ink)', strokeWidth: 2.2, roughness: .5, seed }))}</g>`;
-  return draw(shape(o(status === 'ready' ? 'var(--ink-2)' : 'var(--faint)')));
+  // Running: the agent's colour with a filled play mark. Waiting (ready or not yet approved): a clock face.
+  if (status === 'running') { const c = options.agentColor ?? 'var(--ink)'; return draw(shape(o(c, { strokeWidth: 1.8 })), gen.polygon([[6.3, 4.9], [11.3, 8], [6.3, 11.1]], { stroke: c, fill: c, fillStyle: 'solid', roughness: .3, seed })); }
+  const c = status === 'ready' ? 'var(--ink-2)' : 'var(--faint)';
+  return draw(gen.circle(8, 8, 13.4, o(c)), gen.linearPath([[8, 4.3], [8, 8.3], [10.9, 9.9]], { stroke: c, strokeWidth: 1.5, roughness: .4, seed }));
 }
 
 export interface CardLook { color: string; width: number; dashed?: boolean; stacked?: boolean; hatch?: boolean; selected?: boolean; live?: boolean }
@@ -45,10 +47,11 @@ export function cardMarkup(id: string, look: CardLook, frame = 0) {
 }
 
 /** One agent's arc of the progress ring: its share of the circle, how much of that share is done, and whether it is working now. */
-export interface RingSegment { agentId: string; color: string; share: number; done: number; running: boolean; single: boolean }
+export interface RingSegment { agentId: string; color: string; share: number; done: number; running: boolean }
 /**
  * Progress drawn as a stroke around the node: each agent owns an arc in its own colour, sized by its share of the work,
- * and inks it clockwise from the top as its steps and tests pass. Work still ahead is a faint dotted trace.
+ * and inks it clockwise from the top as its steps and tests pass. Work still ahead is a faint dotted trace;
+ * an agent working now has a pulsing dot where its ink stops.
  */
 export function ringMarkup(id: string, segments: RingSegment[]) {
   const r = NODE_D / 2 + RING_GAP, gap = segments.length > 1 ? .09 : 0, seed = seedOf(`ring:${id}`);
@@ -60,8 +63,7 @@ export function ringMarkup(id: string, segments: RingSegment[]) {
     if (drawn > .02) out += `<g class="ring-done" data-agent="${s.agentId}">${draw(arc(a, a + drawn, { strokeWidth: RING_W, roughness: .7, bowing: .6 }))}</g>`;
     if (s.running) {
       const t = a + drawn;
-      if (s.single) out += `<g class="ring-spin" style="transform-origin:${C}px ${C}px" data-agent="${s.agentId}">${draw(arc(t, t + 1.1, { strokeWidth: RING_W, roughness: .6 }))}</g>`;
-      else out += `<circle class="ring-tip" cx="${C + r * Math.cos(t)}" cy="${C + r * Math.sin(t)}" r="4.6" style="fill:${s.color};transform-origin:${C + r * Math.cos(t)}px ${C + r * Math.sin(t)}px" data-agent="${s.agentId}"/>`;
+      out += `<circle class="ring-tip" cx="${C + r * Math.cos(t)}" cy="${C + r * Math.sin(t)}" r="4.6" style="fill:${s.color};transform-origin:${C + r * Math.cos(t)}px ${C + r * Math.sin(t)}px" data-agent="${s.agentId}"/>`;
     }
     a += span + gap;
   });

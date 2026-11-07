@@ -94,6 +94,7 @@ Arborun｜设计与协作规则
    ├─ 拍板的决定在提问阶段确认；树中不出现“待决定”节点。
    ├─ 视觉方向已由用户指定：黑底、米白手绘形状与手写字体。
    ├─ 右上角只保留一键折叠与 View 两个图标，不加文字。
+   ├─ 2026-11-07：节点为圆形三段（名称／内容／状态图标），默认折叠；Agent 进度为圆外分色粗描边，节点底部不放头像。
    ├─ 2026-11-07：试过内嵌在对话中；用户决定改回侧栏（fullscreen），保留折叠为概览、展开为详情。
    ├─ pnpm build:mcp 构建后自动重新安装插件到本机 Codex；重启 Codex 后生效。
    ├─ 插件构建产物随仓库提交；一行安装：codex plugin marketplace add arboreon-lab/arborun && codex plugin add arborun@arborun

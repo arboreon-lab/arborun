@@ -40,8 +40,7 @@ describe('the tree as the accepting person sees it', () => {
     expect(view.get('r1')!.mode).toBe('set');
     expect(view.get(workId('r1'))!.children).toEqual(['w1']);
     expect(view.get('w1')!.parentId).toBe(workId('r1'));
-    expect(initialExpanded(view, 'root').has(workId('r1'))).toBe(false);
-    expect(initialExpanded(view, 'root').has('r1')).toBe(true);
+    expect(initialExpanded(view, 'root').size).toBe(0);
   });
   test('progress counts tests, not agent steps; acceptance counts every test', () => {
     const nodes = plan();
@@ -74,7 +73,9 @@ describe('view-only geometry', () => {
     const trunk = layout.trunk.map(id => layout.pos.get(id)!);
     expect(layout.trunk.at(-1)).toBe(ACCEPT_ID);
     trunk.slice(1).forEach((p, i) => expect(p[axis]).toBeGreaterThan(trunk[i][axis]));
-    expect(layout.rects.map(r => r.id).sort()).toEqual(['r1', 'r2']); // trunk nodes stay cards; their contents sit beside them
+    expect(layout.rects).toEqual([]); // folded by default: the trunk alone
+    const open = layoutTree(tree, 'root', view, new Set(['samples', 'effects', 'r1', 'r2']));
+    expect(open.rects.map(r => r.id).sort()).toEqual(['r1', 'r2']); // trunk nodes stay cards; their contents sit beside them
   });
   test('execution state never moves cards', () => {
     const nodes = plan(), before = layoutTree(buildView(session(nodes)), 'root', 'tb', new Set(['effects', 'r1']));

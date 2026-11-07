@@ -345,14 +345,13 @@ export function TreeCanvas({ session, selectedId, onSelect, onEnter, editing = f
     };
     // Each agent inks its own arc of the ring as its steps and tests pass.
     const progress = agentProgress(session, view, id), owned = progress.reduce((t, a) => t + a.total, 0);
-    const ring: RingSegment[] = progress.map(a => ({ agentId: a.agentId, color: agentVar(a.agentId), share: a.total / owned, done: a.done / a.total, running: a.running > 0, single: owned === 1 }));
+    const ring: RingSegment[] = progress.map(a => ({ agentId: a.agentId, color: agentVar(a.agentId), share: a.total / owned, done: a.done / a.total, running: a.running > 0 }));
     const c = counts(session, view, v.kind === 'accept' ? ACCEPT_ID : id);
     const text = isRoot ? session.goal : v.kind === 'accept' ? '逐项查看每个效果的测试与证据；全部通过后验收。' : v.kind === 'work' ? `${v.children.length} 个步骤` : n?.action ?? '';
     const label = stateLabel(session, view, id);
     let meta: React.ReactNode = null;
     if (isFolder(v) || isRoot || v.kind === 'accept') meta = c.total > 0 && <span className="meta">{c.passed + c.skipped}/{c.total}</span>;
     else if (n?.kind === 'test') meta = <span className={`by ${n.by ?? 'agent'}`}>{n.by === 'user' ? '你设定' : 'Agent 补充'}</span>;
-    const who = progress.filter(a => a.running).map(a => a.agentId);
     return <div key={id} className={['node', folded && 'group collapsed', isRoot && 'start', v.kind === 'accept' && 'end', quiet && 'work', dragging === id && 'dragging', impact?.has(id) && 'impacted'].filter(Boolean).join(' ')}
       role="treeitem" tabIndex={-1} data-id={id} data-node={id} data-node-id={id} data-kind={v.kind} data-state={status} data-status={status} data-running={Boolean(attempt)} data-live={Boolean(attempt)} data-look={JSON.stringify(look)}
       data-agents={progress.map(a => `${a.agentId}:${a.done}/${a.total}`).join(' ')}
@@ -360,12 +359,11 @@ export function TreeCanvas({ session, selectedId, onSelect, onEnter, editing = f
       style={{ left: p.x - CARD_W / 2, top: p.y - CARD_H / 2, ...(attempt ? { '--agent': agentVar(attempt.agentId) } : {}) } as React.CSSProperties}>
       <svg className="sketch" viewBox={`0 0 ${CARD_W + SKETCH_M * 2} ${CARD_H + SKETCH_M * 2}`} aria-hidden="true" dangerouslySetInnerHTML={{ __html: cardMarkup(id, look) }} />
       {ring.length > 0 && <svg className="ring" viewBox={`0 0 ${CARD_W + SKETCH_M * 2} ${CARD_H + SKETCH_M * 2}`} aria-hidden="true" dangerouslySetInnerHTML={{ __html: ringMarkup(id, ring) }} />}
-      <div className="head"><Glyph session={session} view={view} id={id} /><span className="title">{v.title}</span></div>
+      <div className="head"><span className="title">{v.title}</span></div>
       <div className="body">
         {attempt ? <span className="doing" title={act?.summary}>{act?.summary ?? `${agentName(attempt.agentId)} 已领取`}</span> : <span className="text">{text}</span>}
       </div>
-      <div className="foot"><span className="state">{label}</span>{meta}
-        {who.length > 0 && <span className="who">{who.map(a => <Avatar key={a} session={session} agentId={a} />)}</span>}</div>
+      <div className="foot"><span className="state" title={label}><Glyph session={session} view={view} id={id} size={20} /><span className="sr-only">{label}</span></span>{meta}</div>
       {isFolder(v) && id !== scope && <button type="button" className="expand" data-toggle={id} aria-expanded={expanded.has(id)} aria-label={`${expanded.has(id) ? '收起' : '展开'}：${v.title}`}>{expanded.has(id) ? '−' : `+${v.children.length}`}</button>}
     </div>;
   };

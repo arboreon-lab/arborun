@@ -221,7 +221,9 @@ test('节点菜单编辑、根详情批准、真实 MCP 状态原位更新并在
   const reviewer = await claimNode('review');
   const parallel = await claimNode('parallel');
   await page.locator('[data-breadcrumb="root"]').click();
-  await expect(nodeCard(page, 'investigation').locator('[title="兼容性 Agent"]')).toBeVisible();
+  // The working agent shows as a pulsing tip on its own arc of the folded node's ring, not as an avatar.
+  await expect(nodeCard(page, 'investigation').locator('.ring-tip')).toHaveCount(1);
+  await expect(nodeCard(page, 'investigation').locator('.avatar')).toHaveCount(0);
   await expect(nodeCard(page, 'parallel')).toHaveAttribute('data-running', 'true');
   await nodeButton(page, '兼容性调查').dblclick();
   await expect(shell(page)).toHaveAttribute('data-scope', 'investigation');
