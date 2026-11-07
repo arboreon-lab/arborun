@@ -104,8 +104,10 @@ svg.edges g { transition: opacity .2s; }
 .region-count { margin-right: auto; }
 @container (max-width: 300px) { .region-head .mini-bar { display: none; } }
 
-.world[data-lod="far"] .node .body, .world[data-lod="far"] .node .foot, .world[data-lod="far"] .msg-chip .summary, .world[data-lod="far"] .region-head > :not(.region-title) { visibility: hidden; }
-.world[data-lod="far"] .node .head { grid-row: 1 / -1; align-self: center; flex-direction: column; width: 150px; border: 0; }
+.world[data-lod="far"] .node { grid-template-rows: 1fr; padding: 16px; }
+.world[data-lod="far"] .node .body, .world[data-lod="far"] .node .foot { display: none; }
+.world[data-lod="far"] .msg-chip .summary, .world[data-lod="far"] .region-head > :not(.region-title) { visibility: hidden; }
+.world[data-lod="far"] .node .head { align-self: center; justify-self: center; width: 152px; padding: 0; border: 0; }
 .world[data-lod="far"] .node .title { font-size: clamp(18px, calc(14px * var(--inv, 1)), 34px); line-height: 1.15; white-space: normal; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; text-align: center; }
 .world[data-lod="far"] .node .glyph { width: 30px; height: 30px; }
 .world[data-lod="far"] .region-title { font-size: clamp(16px, calc(13px * var(--inv, 1)), 30px); }

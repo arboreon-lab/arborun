@@ -364,3 +364,31 @@ test('长任务：节点完成后，测试里每个样例显示实际结果与�
   await expect.poll(() => video.evaluate(v => (v as HTMLVideoElement).readyState)).toBeGreaterThan(0);
   await page.screenshot({ path: test.info().outputPath('reference-sample-results.png'), fullPage: true });
 });
+
+test('窄侧栏（如 Codex 侧栏）里：整体任务从标题旁展开、悬停出详情、缩小时名称居中', async ({ page }) => {
+  const model = JSON.parse(await readFile('examples/mcp-model-plan.json', 'utf8'));
+  sessionId = ((await tool('arborun_plan', model)).structuredContent as unknown as { session: Session }).session.id;
+  await page.setViewportSize({ width: 420, height: 760 });
+  await page.goto(`${runtime.panelUrl}&sessionId=${sessionId}`);
+  await expect(page.getByTestId('tree-canvas')).toBeVisible();
+  // The whole task really opens with room for its content, not collapsed to its header.
+  await page.locator('[data-task-toggle]').click();
+  await expect.poll(async () => (await page.locator('.task-sheet').boundingBox())?.height ?? 0).toBeGreaterThan(300);
+  await expect(taskPanel(page).getByRole('heading', { name: '描述', exact: true })).toBeInViewport();
+  await page.locator('[data-task-toggle]').click();
+  await expect(page.locator('.task-sheet')).toHaveCount(0);
+  // Hover previews a node even in a narrow panel, and leaving closes it.
+  await nodeButton(page, '照片整理干净').hover();
+  await expect(page.locator('.hover-panel')).toContainText('照片整理干净');
+  await expect.poll(async () => (await page.locator('.hover-panel').boundingBox())?.width ?? 0).toBeGreaterThan(200);
+  await page.mouse.move(2, 740);
+  await expect(page.locator('.hover-panel')).toHaveCount(0);
+  // Zoomed out, a node shows only its name, centred in the circle.
+  await page.getByTestId('tree-canvas').focus();
+  for (let i = 0; i < 3; i++) await page.keyboard.press('-');
+  await expect(page.getByTestId('canvas-world')).toHaveAttribute('data-lod', 'far');
+  const node = nodeCard(page, 's-data');
+  await expect(node.locator('.body')).toBeHidden();
+  const [circle, title] = await Promise.all([node.boundingBox(), node.locator('.title').boundingBox()]);
+  expect(Math.abs((title!.y + title!.height / 2) - (circle!.y + circle!.height / 2))).toBeLessThan(circle!.height * 0.08);
+});

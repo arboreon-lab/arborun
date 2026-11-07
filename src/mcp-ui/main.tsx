@@ -37,7 +37,7 @@ function Arborun() {
   // The whole task drops down under the title; hovering a node previews its details on the right.
   const [taskOpen, setTaskOpen] = useState(false);
   const [hoverId, setHoverId] = useState<string | null>(null);
-  const [hoverLeft, setHoverLeft] = useState(false);
+  const [hoverPlace, setHoverPlace] = useState<{ left: boolean; width: number }>({ left: false, width: 380 });
   const hoverTimer = useRef<number | undefined>(undefined);
   const overPanel = useRef(false);
   const [locateRequest, setLocateRequest] = useState<{ id: string; key: number }>();
@@ -135,9 +135,14 @@ function Arborun() {
     if (inspector?.mode === 'edit' || inspector?.mode === 'add' || request) return;
     hoverTimer.current = window.setTimeout(() => {
       if (!id && overPanel.current) return;
-      // Never cover the node being hovered: near the right edge the preview opens on the left.
-      if (id) { const node = document.querySelector(`[data-node-id="${CSS.escape(id)}"]`)?.getBoundingClientRect(), area = document.querySelector('.workspace-area')?.getBoundingClientRect();
-        setHoverLeft(Boolean(node && area && node.right > area.right - 420)); }
+      // Keep the hovered node in view: the preview takes the wider free side, sized to it (380px at most, 240px at least).
+      if (id) {
+        const node = document.querySelector(`[data-node-id="${CSS.escape(id)}"]`)?.getBoundingClientRect(), area = document.querySelector('.workspace-area')?.getBoundingClientRect();
+        if (node && area) {
+          const leftSpace = node.left - area.left, rightSpace = area.right - node.right, left = leftSpace > rightSpace;
+          setHoverPlace({ left, width: Math.round(Math.max(240, Math.min(380, (left ? leftSpace : rightSpace) - 12))) });
+        }
+      }
       setHoverId(id);
     }, id ? 140 : 260);
   };
@@ -244,7 +249,7 @@ function Arborun() {
             onClose={() => setTaskOpen(false)} onEdit={() => {}} onSave={saveNode} onDelete={removeNode} onAdd={() => {}} onAskAi={askAi} onGenerateCases={generateCases} loadArtifact={loadArtifact}
             onLocate={id => { setTaskOpen(false); locate(id); }} onSaveAgents={saveAgents} taskActions={taskActions} />
         </div>}
-        {(hoverId && hoverId !== inspector?.id && !request && !showRecords) ? <div className={`hover-panel${hoverLeft ? ' left' : ''}`} onMouseEnter={() => { overPanel.current = true; window.clearTimeout(hoverTimer.current); }} onMouseLeave={() => { overPanel.current = false; hover(null); }}>
+        {(hoverId && hoverId !== inspector?.id && !request && !showRecords) ? <div className={`hover-panel${hoverPlace.left ? ' left' : ''}`} style={{ width: hoverPlace.width }} onMouseEnter={() => { overPanel.current = true; window.clearTimeout(hoverTimer.current); }} onMouseLeave={() => { overPanel.current = false; hover(null); }}>
           <NodeInspector key={`${session.id}:hover:${hoverId}`} session={session} nodeId={hoverId} mode="detail" busy={busy} editRevision={session.revision}
             onClose={() => setHoverId(null)} onEdit={() => { setHoverId(null); openInspector(hoverId, 'edit'); }} onSave={saveNode} onDelete={removeNode} onAdd={id => { setHoverId(null); openInspector(id, 'add'); }} onAskAi={askAi} onGenerateCases={generateCases} loadArtifact={loadArtifact}
             onLocate={id => { setHoverId(null); locate(id); }} taskActions={hoverId === ACCEPT_ID ? taskActions : undefined} />
