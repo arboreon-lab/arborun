@@ -4,9 +4,14 @@
     "arborun": {
       "type": "stdio",
       "command": "node",
-      "args": ["${PLUGIN_ROOT}/dist-mcp/index.mjs"],
+      "args": [
+        "${PLUGIN_ROOT}/dist-mcp/index.mjs"
+      ],
       "cwd": "${PLUGIN_ROOT}",
-      "env": { "ARBORUN_MCP_DATA_DIR": "${PLUGIN_DATA}/state" }
+      "env": {
+        "ARBORUN_MCP_DATA_DIR": "${PLUGIN_DATA}/state",
+        "ARBORUN_OPEN_BROWSER": "0"
+      }
     }
   }
 }

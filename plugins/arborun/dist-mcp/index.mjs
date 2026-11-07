@@ -4575,7 +4575,7 @@ function isRef(value) {
 function cloneIssues(issues) {
   return issues.map((iss) => iss.path ? { ...iss, path: iss.path.slice() } : { ...iss });
 }
-function isRecursive(inst, stack, resolve2) {
+function isRecursive(inst, stack, resolve3) {
   const cached2 = recursive.get(inst);
   if (cached2 !== void 0)
     return cached2 ? PROVEN : NONE;
@@ -4585,7 +4585,7 @@ function isRecursive(inst, stack, resolve2) {
   let result = NONE;
   const check2 = (child) => {
     if (result !== PROVEN && child?._zod) {
-      const answer = isRecursive(child, stack, resolve2);
+      const answer = isRecursive(child, stack, resolve3);
       if (answer > result)
         result = answer;
     }
@@ -4596,7 +4596,7 @@ function isRecursive(inst, stack, resolve2) {
       const desc = Object.getOwnPropertyDescriptor(sh, key);
       if (spread && !desc.enumerable)
         continue;
-      const child = desc.get ? ASSUMED : desc.value?._zod ? isRecursive(desc.value, stack, resolve2) : NONE;
+      const child = desc.get ? ASSUMED : desc.value?._zod ? isRecursive(desc.value, stack, resolve3) : NONE;
       if (child > answer)
         answer = child;
     }
@@ -4660,7 +4660,7 @@ function isRecursive(inst, stack, resolve2) {
       break;
     // `$ZodLazy` caches its inner on the def, so a resolved edge is followed exactly
     case "lazy": {
-      const inner = def._cachedInner ?? (resolve2 ? inst._zod.innerType : void 0);
+      const inner = def._cachedInner ?? (resolve3 ? inst._zod.innerType : void 0);
       merge2(inner ? isRecursive(inner, stack, false) : ASSUMED);
       break;
     }
@@ -23404,7 +23404,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve2.call(this, root, ref);
+      let _sch = resolve3.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a3 = root.localRefs) === null || _a3 === void 0 ? void 0 : _a3[ref];
         const { schemaId } = this.opts;
@@ -23431,7 +23431,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve2(root, ref) {
+    function resolve3(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -24295,7 +24295,7 @@ var require_fast_uri = __commonJS({
       }
       return uri;
     }
-    function resolve2(baseURI, relativeURI, options) {
+    function resolve3(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const {
         parsed: baseParsed,
@@ -24686,7 +24686,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize,
-      resolve: resolve2,
+      resolve: resolve3,
       resolveComponent,
       equal,
       serialize,
@@ -27675,10 +27675,139 @@ var require_dist = __commonJS({
   }
 });
 
-// src/mcp/index.ts
-import { readFile as readFile2 } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
+// src/mcp/install.ts
+var install_exports = {};
+__export(install_exports, {
+  CLIENTS: () => CLIENTS,
+  install: () => install
+});
+import { execFileSync } from "node:child_process";
+import { copyFile, mkdir as mkdir2, readFile as readFile2, writeFile } from "node:fs/promises";
+import { existsSync, realpathSync } from "node:fs";
+import { homedir, platform } from "node:os";
 import { dirname, join as join2, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+function stableNode() {
+  const real = realpathSync(process.execPath);
+  for (const link of ["/opt/homebrew/bin/node", "/usr/local/bin/node", "/usr/bin/node"]) {
+    try {
+      if (realpathSync(link) === real) return link;
+    } catch {
+    }
+  }
+  return process.execPath;
+}
+async function placeServer() {
+  const source = dirname(fileURLToPath(import.meta.url));
+  const target = join2(home, ".arborun", "server");
+  if (resolve(source) !== resolve(target)) {
+    await mkdir2(target, { recursive: true });
+    for (const file2 of ["index.mjs", "tree.html"]) await copyFile(join2(source, file2), join2(target, file2));
+  }
+  return { command: stableNode(), args: [join2(target, "index.mjs")], env: { ARBORUN_MCP_DATA_DIR: join2(home, ".arborun", "data") } };
+}
+async function writeConfig(path, entry) {
+  let config2 = {};
+  if (existsSync(path)) {
+    const text2 = await readFile2(path, "utf8");
+    try {
+      config2 = text2.trim() ? JSON.parse(text2) : {};
+    } catch {
+      throw new Error(`\u65E0\u6CD5\u89E3\u6790 ${path}\uFF08\u53EF\u80FD\u5305\u542B\u6CE8\u91CA\uFF09\u3002\u8BF7\u624B\u52A8\u628A --print \u8F93\u51FA\u7684\u7247\u6BB5\u52A0\u5165 mcpServers\u3002`);
+    }
+    await writeFile(`${path}.arborun-backup-${Date.now()}`, text2);
+  } else await mkdir2(dirname(path), { recursive: true });
+  const servers = config2.mcpServers && typeof config2.mcpServers === "object" ? config2.mcpServers : {};
+  config2.mcpServers = { ...servers, arborun: entry };
+  await writeFile(path, `${JSON.stringify(config2, null, 2)}
+`);
+}
+function hasCli(name) {
+  try {
+    execFileSync(platform() === "win32" ? "where" : "which", [name], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+async function install(argv) {
+  if (!argv.length || argv.includes("-h") || argv.includes("--help")) {
+    console.log(usage);
+    return;
+  }
+  const server = await placeServer();
+  const entry = { command: server.command, args: server.args, env: server.env };
+  if (argv.includes("--print")) {
+    console.log(JSON.stringify({ mcpServers: { arborun: entry } }, null, 2));
+    return;
+  }
+  const configIndex = argv.indexOf("--config");
+  if (configIndex >= 0) {
+    const path = resolve(argv[configIndex + 1] ?? "");
+    if (!argv[configIndex + 1]) throw new Error("\u8BF7\u5728 --config \u540E\u63D0\u4F9B\u914D\u7F6E\u6587\u4EF6\u8DEF\u5F84\u3002");
+    await writeConfig(path, entry);
+    console.log(`\u5DF2\u5199\u5165 ${path}\uFF1B\u91CD\u542F\u8BE5\u5DE5\u5177\u540E\u751F\u6548\u3002`);
+    return;
+  }
+  const targets = argv.includes("--all") ? Object.keys(CLIENTS).filter((id2) => id2 !== "codex" && installed(id2)) : argv.filter((a) => !a.startsWith("-"));
+  if (!targets.length) throw new Error(argv.includes("--all") ? "\u6CA1\u6709\u68C0\u6D4B\u5230\u652F\u6301\u7684\u5DE5\u5177\u3002\u53EF\u7528 --config \u6307\u5B9A\u914D\u7F6E\u6587\u4EF6\u3002" : usage);
+  for (const id2 of targets) {
+    const client = CLIENTS[id2];
+    if (!client) throw new Error(`\u4E0D\u8BA4\u8BC6\u7684\u5DE5\u5177\uFF1A${id2}\u3002\u652F\u6301\uFF1A${Object.keys(CLIENTS).join("\u3001")}\uFF1B\u5176\u4ED6\u5DE5\u5177\u53EF\u7528 --config\u3002`);
+    if (client.cli) {
+      if (!hasCli(client.cliName)) {
+        console.log(`${client.title}\uFF1A\u672A\u627E\u5230 ${client.cliName} \u547D\u4EE4\uFF0C\u8DF3\u8FC7\u3002`);
+        continue;
+      }
+      try {
+        execFileSync(client.cliName, ["mcp", "remove", ...id2 === "claude-code" ? ["-s", "user"] : [], "arborun"], { stdio: "ignore" });
+      } catch {
+      }
+      execFileSync(client.cliName, client.cli(server.command, server.args, server.env), { stdio: "inherit" });
+      console.log(`${client.title}\uFF1A\u5DF2\u6CE8\u518C arborun\u3002`);
+    } else {
+      await writeConfig(client.config, entry);
+      console.log(`${client.title}\uFF1A\u5DF2\u5199\u5165 ${client.config}\uFF1B\u91CD\u542F ${client.title} \u540E\u751F\u6548\u3002`);
+    }
+  }
+  console.log(`\u670D\u52A1\u7AEF\u4F4D\u4E8E ${server.args[0]}\uFF1B\u91CD\u65B0\u8FD0\u884C\u540C\u4E00\u547D\u4EE4\u5373\u53EF\u66F4\u65B0\u3002`);
+}
+var home, appData, appSupport, CLIENTS, usage, installed;
+var init_install = __esm({
+  "src/mcp/install.ts"() {
+    "use strict";
+    home = homedir();
+    appData = process.env.APPDATA ?? join2(home, "AppData", "Roaming");
+    appSupport = (name) => platform() === "darwin" ? join2(home, "Library", "Application Support", name) : platform() === "win32" ? join2(appData, name) : join2(home, ".config", name);
+    CLIENTS = {
+      "claude-desktop": { title: "Claude Desktop", config: join2(appSupport("Claude"), "claude_desktop_config.json") },
+      "claude-code": { title: "Claude Code", cliName: "claude", cli: (command, args, env) => ["mcp", "add", "-s", "user", ...Object.entries(env).flatMap(([k2, v2]) => ["-e", `${k2}=${v2}`]), "arborun", "--", command, ...args] },
+      codex: { title: "Codex", cliName: "codex", cli: (command, args, env) => ["mcp", "add", ...Object.entries(env).flatMap(([k2, v2]) => ["--env", `${k2}=${v2}`]), "arborun", "--", command, ...args] },
+      antigravity: { title: "Antigravity", config: join2(home, ".gemini", "config", "mcp_config.json") },
+      trae: { title: "Trae", config: join2(appSupport("Trae"), "mcp.json") },
+      workbuddy: { title: "WorkBuddy", config: join2(home, ".workbuddy", "mcp.json") },
+      cursor: { title: "Cursor", config: join2(home, ".cursor", "mcp.json") },
+      "gemini-cli": { title: "Gemini CLI", config: join2(home, ".gemini", "settings.json") }
+    };
+    usage = `Arborun MCP \u5B89\u88C5
+\u7528\u6CD5\uFF1A
+  npx -y github:arboreon-lab/arborun#mcp install <\u5DE5\u5177>      \u652F\u6301\uFF1A${Object.keys(CLIENTS).join("\u3001")}
+  npx -y github:arboreon-lab/arborun#mcp install --all       \u4E3A\u672C\u673A\u5DF2\u5B89\u88C5\u7684\u4E0A\u8FF0\u5DE5\u5177\u5168\u90E8\u5B89\u88C5\uFF08Codex \u5EFA\u8BAE\u7528\u63D2\u4EF6\uFF0C--all \u4E0D\u542B Codex\uFF09
+  npx -y github:arboreon-lab/arborun#mcp install --config <mcp \u914D\u7F6E\u6587\u4EF6\u8DEF\u5F84>   \u4EFB\u4F55\u4F7F\u7528 mcpServers \u683C\u5F0F\u7684\u5DE5\u5177
+  npx -y github:arboreon-lab/arborun#mcp install --print     \u53EA\u6253\u5370\u914D\u7F6E\u7247\u6BB5\uFF0C\u4E0D\u5199\u6587\u4EF6`;
+    installed = (id2) => {
+      const client = CLIENTS[id2];
+      return client.cliName ? hasCli(client.cliName) : existsSync(dirname(client.config));
+    };
+  }
+});
+
+// src/mcp/index.ts
+import { readFile as readFile3 } from "node:fs/promises";
+import { fileURLToPath as fileURLToPath2 } from "node:url";
+import { dirname as dirname2, join as join3, resolve as resolve2 } from "node:path";
+import { homedir as homedir2, platform as platform2 } from "node:os";
+import { spawn } from "node:child_process";
 
 // node_modules/.pnpm/@modelcontextprotocol+sdk@1.32.2_zod@4.6.7/node_modules/@modelcontextprotocol/sdk/dist/esm/server/stdio.js
 import process2 from "node:process";
@@ -29308,12 +29437,12 @@ var StdioServerTransport = class {
     this.onclose?.();
   }
   send(message) {
-    return new Promise((resolve2) => {
+    return new Promise((resolve3) => {
       const json2 = serializeMessage(message);
       if (this._stdout.write(json2)) {
-        resolve2();
+        resolve3();
       } else {
-        this._stdout.once("drain", resolve2);
+        this._stdout.once("drain", resolve3);
       }
     });
   }
@@ -35388,7 +35517,7 @@ var Protocol = class {
           return;
         }
         const pollInterval = task2.pollInterval ?? this._options?.defaultTaskPollInterval ?? 1e3;
-        await new Promise((resolve2) => setTimeout(resolve2, pollInterval));
+        await new Promise((resolve3) => setTimeout(resolve3, pollInterval));
         options?.signal?.throwIfAborted();
       }
     } catch (error62) {
@@ -35405,7 +35534,7 @@ var Protocol = class {
    */
   request(request, resultSchema, options) {
     const { relatedRequestId, resumptionToken, onresumptiontoken, task, relatedTask } = options ?? {};
-    return new Promise((resolve2, reject) => {
+    return new Promise((resolve3, reject) => {
       const earlyReject = (error62) => {
         reject(error62);
       };
@@ -35483,7 +35612,7 @@ var Protocol = class {
           if (!parseResult.success) {
             reject(parseResult.error);
           } else {
-            resolve2(parseResult.data);
+            resolve3(parseResult.data);
           }
         } catch (error62) {
           reject(error62);
@@ -35745,12 +35874,12 @@ var Protocol = class {
       }
     } catch {
     }
-    return new Promise((resolve2, reject) => {
+    return new Promise((resolve3, reject) => {
       if (signal.aborted) {
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
         return;
       }
-      const timeoutId = setTimeout(resolve2, interval);
+      const timeoutId = setTimeout(resolve3, interval);
       signal.addEventListener("abort", () => {
         clearTimeout(timeoutId);
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
@@ -36894,7 +37023,7 @@ var McpServer = class {
     let task = createTaskResult.task;
     const pollInterval = task.pollInterval ?? 5e3;
     while (task.status !== "completed" && task.status !== "failed" && task.status !== "cancelled") {
-      await new Promise((resolve2) => setTimeout(resolve2, pollInterval));
+      await new Promise((resolve3) => setTimeout(resolve3, pollInterval));
       const updatedTask = await extra.taskStore.getTask(taskId);
       if (!updatedTask) {
         throw new McpError(ErrorCode.InternalError, `Task ${taskId} not found during polling`);
@@ -37556,6 +37685,11 @@ function K3(Z, $, J, X) {
 function N3(Z, $, J, X, V) {
   return Z.registerResource($, J, { mimeType: p, ...X }, V);
 }
+var TQ = "io.modelcontextprotocol/ui";
+function Y3(Z) {
+  if (!Z) return;
+  return Z.extensions?.[TQ];
+}
 
 // src/mcp/core.ts
 import { createHash, randomUUID as randomUUID2, timingSafeEqual } from "node:crypto";
@@ -38210,7 +38344,7 @@ var ArborunRuntime = class {
     this.options = options;
     this.service = new ArborunService(options.snapshot, { recover: true });
     this.mcp = new McpServer({ name: "arborun", version: "0.2.3" }, {
-      instructions: "Arborun coordinates a user-editable decision/execution tree. Before proposing a plan, ask the user in the normal Codex conversation to resolve missing requirements; record confirmed answers in clarifications and never put unanswered requirements into executable nodes. Before performing task changes, propose a concrete plan with context, actions, acceptance checks, dependencies, conditional branches and agents. Show the tree and stop for UI approval. Never approve or accept for the user. After UI approval read the latest revision, claim each node before its action, perform the work using host tools, report actual evidence and checks, then submit the results tree for human acceptance. Continue normal host conversation output. Report actual observable actions and messages through arborun_activity after using real host tools; it never dispatches or receives messages for the host. MCP only observes reported actions. Do not call user-only tools or use browser automation to approve. A changed plan revokes approval; do not continue with old claims."
+      instructions: 'Arborun coordinates a user-editable execution tree, built around what the user will check. Before proposing a plan, ask the user in the normal conversation to resolve missing requirements and decisions; record confirmed answers in clarifications and never put unanswered requirements into the tree. Plan with the root children as the trunk in order; put each visible outcome in a kind=result node, with kind=test nodes under it ("when ..., you should see ...", by=user for tests the user stated or confirmed, by=agent for tests you add) and the action nodes that implement it. Each action/test states target, input, acceptance and failure route. Show the tree and stop for the user to approve it in the Arborun panel; never approve or accept for the user and never use browser automation on the panel. After approval read the latest revision, claim each node before acting, do the work with your own tools, report actual evidence and checks, report observable actions and messages through arborun_activity, then submit the results tree for human acceptance. Continue normal conversation output. A changed plan revokes approval; do not continue with old claims. If the host cannot show the panel, Arborun opens it in the local browser.'
     });
     this.register();
   }
@@ -38240,10 +38374,19 @@ var ArborunRuntime = class {
     const session = this.service.get(sessionId);
     return { session, ...afterSequence === void 0 ? {} : { events: session.events.filter((e) => e.sequence > afterSequence) } };
   }
+  // Hosts without MCP Apps get the panel in the local browser, once per task. The URL holds the user token and stays out of tool output.
+  opened = /* @__PURE__ */ new Set();
+  openPanel(session) {
+    if (!this.options.openUrl || !this.panelUrl || this.opened.has(session.id)) return false;
+    if (Y3(this.mcp.server.getClientCapabilities())) return false;
+    this.opened.add(session.id);
+    return this.options.openUrl(`${this.panelUrl}&sessionId=${encodeURIComponent(session.id)}`);
+  }
   result(data2) {
     const session = data2.session;
+    const opened = session ? this.openPanel(session) : false;
     return {
-      content: [{ type: "text", text: session ? this.service.renderTree(session.id) : "Arborun\n\u2514\u2500 \u8BF7\u9009\u62E9\u6216\u521B\u5EFA\u4EFB\u52A1\u6811\u3002" }],
+      content: [{ type: "text", text: (session ? this.service.renderTree(session.id) : "Arborun\n\u2514\u2500 \u8BF7\u9009\u62E9\u6216\u521B\u5EFA\u4EFB\u52A1\u6811\u3002") + (opened ? "\n\nArborun \u9762\u677F\u5DF2\u5728\u7528\u6237\u672C\u673A\u6D4F\u89C8\u5668\u4E2D\u6253\u5F00\uFF1B\u8BF7\u8BA9\u7528\u6237\u5728\u9762\u677F\u4E2D\u4FEE\u6539\u3001\u6279\u51C6\u6216\u9A8C\u6536\u3002" : "") }],
       structuredContent: data2,
       _meta: { uiToken: this.uiToken, panelUrl: this.panelUrl }
     };
@@ -38370,9 +38513,9 @@ var ArborunRuntime = class {
         response.writeHead(400).end(JSON.stringify({ error: error62 instanceof Error ? error62.message : "\u64CD\u4F5C\u5931\u8D25" }));
       }
     });
-    await new Promise((resolve2, reject) => {
+    await new Promise((resolve3, reject) => {
       server.once("error", reject);
-      server.listen(port, "127.0.0.1", resolve2);
+      server.listen(port, "127.0.0.1", resolve3);
     });
     const address = server.address();
     if (!address || typeof address === "string") throw new Error("\u65E0\u6CD5\u542F\u52A8\u672C\u5730\u9884\u89C8");
@@ -38392,7 +38535,27 @@ async function readBody(request) {
 }
 
 // src/mcp/index.ts
-var data = new SnapshotFile(resolve(process.env.ARBORUN_MCP_DATA_DIR ?? join2(process.cwd(), ".arborun-mcp")));
+if (process.argv[2] === "install") {
+  const { install: install2 } = await Promise.resolve().then(() => (init_install(), install_exports));
+  try {
+    await install2(process.argv.slice(3));
+  } catch (error62) {
+    console.error(error62 instanceof Error ? error62.message : error62);
+    process.exitCode = 1;
+  }
+  process.exit();
+}
+function openUrl(url2) {
+  if (process.env.ARBORUN_OPEN_BROWSER === "0") return false;
+  const [command, args] = platform2() === "darwin" ? ["open", [url2]] : platform2() === "win32" ? ["cmd", ["/c", "start", "", url2]] : ["xdg-open", [url2]];
+  try {
+    spawn(command, args, { stdio: "ignore", detached: true }).unref();
+    return true;
+  } catch {
+    return false;
+  }
+}
+var data = new SnapshotFile(resolve2(process.env.ARBORUN_MCP_DATA_DIR ?? join3(homedir2(), ".arborun", "data")));
 var runtime;
 var http;
 var stopping = false;
@@ -38409,7 +38572,8 @@ try {
   runtime = new ArborunRuntime({
     snapshot: await data.load(),
     save: (value) => data.save(value),
-    html: await readFile2(join2(dirname(fileURLToPath(import.meta.url)), "tree.html"), "utf8")
+    openUrl,
+    html: await readFile3(join3(dirname2(fileURLToPath2(import.meta.url)), "tree.html"), "utf8")
   });
   await runtime.persistRecovery();
   const portArg = process.argv.indexOf("--port");

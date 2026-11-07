@@ -1,0 +1,9 @@
+{
+  "name": "arborun",
+  "version": "0.2.3",
+  "description": "把任务规划成可编辑、可验收的执行树：先问清要求，批准后由 Agent 按树执行，最后逐项验收",
+  "author": { "name": "Arboreon Lab" },
+  "homepage": "https://github.com/arboreon-lab/arborun",
+  "repository": "https://github.com/arboreon-lab/arborun",
+  "keywords": ["execution-tree", "planning", "acceptance", "mcp"]
+}

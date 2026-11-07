@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage } from 'node:http';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
+import { getUiCapability, registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
 import { z } from 'zod';
 import { ArborunService } from './core';
 import { activitySchema, proposeSchema, claimSchema, reportSchema, submitSchema, userActionSchema, type ArborunSnapshot, type Session } from './schema';
@@ -16,6 +16,8 @@ export interface RuntimeOptions {
   snapshot?: ArborunSnapshot;
   save(snapshot: ArborunSnapshot): Promise<void>;
   html: string;
+  /** Opens the local panel for hosts that cannot render MCP Apps. Returns whether it was opened. */
+  openUrl?: (url: string) => boolean;
 }
 
 export class ArborunRuntime {
@@ -28,7 +30,7 @@ export class ArborunRuntime {
   constructor(private readonly options: RuntimeOptions) {
     this.service = new ArborunService(options.snapshot, { recover: true });
     this.mcp = new McpServer({ name: 'arborun', version: '0.2.3' }, {
-      instructions: 'Arborun coordinates a user-editable decision/execution tree. Before proposing a plan, ask the user in the normal Codex conversation to resolve missing requirements; record confirmed answers in clarifications and never put unanswered requirements into executable nodes. Before performing task changes, propose a concrete plan with context, actions, acceptance checks, dependencies, conditional branches and agents. Show the tree and stop for UI approval. Never approve or accept for the user. After UI approval read the latest revision, claim each node before its action, perform the work using host tools, report actual evidence and checks, then submit the results tree for human acceptance. Continue normal host conversation output. Report actual observable actions and messages through arborun_activity after using real host tools; it never dispatches or receives messages for the host. MCP only observes reported actions. Do not call user-only tools or use browser automation to approve. A changed plan revokes approval; do not continue with old claims.',
+      instructions: 'Arborun coordinates a user-editable execution tree, built around what the user will check. Before proposing a plan, ask the user in the normal conversation to resolve missing requirements and decisions; record confirmed answers in clarifications and never put unanswered requirements into the tree. Plan with the root children as the trunk in order; put each visible outcome in a kind=result node, with kind=test nodes under it ("when ..., you should see ...", by=user for tests the user stated or confirmed, by=agent for tests you add) and the action nodes that implement it. Each action/test states target, input, acceptance and failure route. Show the tree and stop for the user to approve it in the Arborun panel; never approve or accept for the user and never use browser automation on the panel. After approval read the latest revision, claim each node before acting, do the work with your own tools, report actual evidence and checks, report observable actions and messages through arborun_activity, then submit the results tree for human acceptance. Continue normal conversation output. A changed plan revokes approval; do not continue with old claims. If the host cannot show the panel, Arborun opens it in the local browser.',
     });
     this.register();
   }
@@ -54,10 +56,21 @@ export class ArborunRuntime {
     return { session, ...(afterSequence === undefined ? {} : { events: session.events.filter(e => e.sequence > afterSequence) }) };
   }
 
+  // Hosts without MCP Apps get the panel in the local browser, once per task. The URL holds the user token and stays out of tool output.
+  private opened = new Set<string>();
+  private openPanel(session: Session) {
+    if (!this.options.openUrl || !this.panelUrl || this.opened.has(session.id)) return false;
+    if (getUiCapability(this.mcp.server.getClientCapabilities() as Parameters<typeof getUiCapability>[0])) return false;
+    this.opened.add(session.id);
+    return this.options.openUrl(`${this.panelUrl}&sessionId=${encodeURIComponent(session.id)}`);
+  }
+
   private result(data: Record<string, unknown>) {
     const session = data.session as Session | undefined;
+    const opened = session ? this.openPanel(session) : false;
     return {
-      content: [{ type: 'text' as const, text: session ? this.service.renderTree(session.id) : 'Arborun\n└─ 请选择或创建任务树。' }],
+      content: [{ type: 'text' as const, text: (session ? this.service.renderTree(session.id) : 'Arborun\n└─ 请选择或创建任务树。')
+        + (opened ? '\n\nArborun 面板已在用户本机浏览器中打开；请让用户在面板中修改、批准或验收。' : '') }],
       structuredContent: data,
       _meta: { uiToken: this.uiToken, panelUrl: this.panelUrl },
     };

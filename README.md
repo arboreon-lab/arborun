@@ -36,6 +36,22 @@ Arborun
 │  │  ├─ 打开命令输出的本地链接，选择示例树。
 │  │  └─ 示例不会自动执行；浏览器本身不是模型宿主。
 │  └─ 预览数据与真实宿主数据分别保存。
+├─ 安装到 Agent 工具（需要 Node.js 22+；装好后重启该工具）
+│  ├─ Codex：codex plugin marketplace add arboreon-lab/arborun && codex plugin add arborun@arborun
+│  ├─ Claude Code：claude plugin install arborun --marketplace arboreon-lab/arborun
+│  ├─ Claude Desktop：npx -y github:arboreon-lab/arborun#mcp install claude-desktop
+│  ├─ Antigravity：npx -y github:arboreon-lab/arborun#mcp install antigravity
+│  ├─ Trae：npx -y github:arboreon-lab/arborun#mcp install trae
+│  ├─ WorkBuddy：npx -y github:arboreon-lab/arborun#mcp install workbuddy
+│  ├─ Cursor／Gemini CLI：npx -y github:arboreon-lab/arborun#mcp install cursor（或 gemini-cli）
+│  ├─ 其他支持 mcpServers 的工具（如 DeepSeek 系列 harness、Trae CN）：
+│  │  └─ npx -y github:arboreon-lab/arborun#mcp install --config <该工具的 MCP 配置文件>
+│  ├─ 本机已装的上述工具一次装好：npx -y github:arboreon-lab/arborun#mcp install --all（不含 Codex）
+│  ├─ 只看配置片段：npx -y github:arboreon-lab/arborun#mcp install --print
+│  ├─ 安装器把服务端复制到 ~/.arborun/server，数据在 ~/.arborun/data；写配置前备份原文件。
+│  ├─ 宿主能渲染 MCP Apps（Codex、Claude 等）时，树显示在宿主内。
+│  │  └─ 不能渲染时，服务端在本机浏览器自动打开面板；带用户凭证的地址不交给模型。
+│  └─ 工作流说明随 MCP 初始化下发；Codex 与 Claude Code 插件另带 skill。
 ├─ Codex 接入
 │  ├─ 一行安装（需要 Node.js 22+）：
 │  │  └─ codex plugin marketplace add arboreon-lab/arborun && codex plugin add arborun@arborun
@@ -68,7 +84,7 @@ Arborun
 │  ├─ 首版同一数据目录仅运行一个服务进程；不同宿主使用独立数据目录。
 │  └─ MCP 连接成功、浏览器测试通过，不等于原生侧栏已经验收。
 ├─ 数据
-│  ├─ ARBORUN_MCP_DATA_DIR 指定数据目录，默认当前目录的 .arborun-mcp。
+│  ├─ ARBORUN_MCP_DATA_DIR 指定数据目录，默认 ~/.arborun/data。
 │  ├─ 插件安装使用 PLUGIN_DATA/state，不将用户任务放进插件源码。
 │  ├─ 本地原子 JSON 快照，包含计划版本、执行记录、证据和验收状态。
 │  ├─ 保存失败不发布新状态，重启时暂停此前活跃执行以供核对。

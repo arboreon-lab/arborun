@@ -1,11 +1,27 @@
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
+import { homedir, platform } from 'node:os';
+import { spawn } from 'node:child_process';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { SnapshotFile } from './persistence';
 import { ArborunRuntime } from './server';
 
-const data = new SnapshotFile(resolve(process.env.ARBORUN_MCP_DATA_DIR ?? join(process.cwd(), '.arborun-mcp')));
+if (process.argv[2] === 'install') {
+  const { install } = await import('./install');
+  try { await install(process.argv.slice(3)); }
+  catch (error) { console.error(error instanceof Error ? error.message : error); process.exitCode = 1; }
+  process.exit();
+}
+
+// Opens the local panel for hosts that cannot render MCP Apps; the URL carries the user token, so it never goes to the model.
+function openUrl(url: string) {
+  if (process.env.ARBORUN_OPEN_BROWSER === '0') return false;
+  const [command, args] = platform() === 'darwin' ? ['open', [url]] : platform() === 'win32' ? ['cmd', ['/c', 'start', '', url]] : ['xdg-open', [url]];
+  try { spawn(command, args as string[], { stdio: 'ignore', detached: true }).unref(); return true; } catch { return false; }
+}
+
+const data = new SnapshotFile(resolve(process.env.ARBORUN_MCP_DATA_DIR ?? join(homedir(), '.arborun', 'data')));
 let runtime: ArborunRuntime | undefined;
 let http: Awaited<ReturnType<ArborunRuntime['listen']>> | undefined;
 let stopping = false;
@@ -20,7 +36,7 @@ async function stop() {
 
 try {
   await data.acquire();
-  runtime = new ArborunRuntime({ snapshot: await data.load(), save: value => data.save(value),
+  runtime = new ArborunRuntime({ snapshot: await data.load(), save: value => data.save(value), openUrl,
     html: await readFile(join(dirname(fileURLToPath(import.meta.url)), 'tree.html'), 'utf8') });
   await runtime.persistRecovery();
   const portArg = process.argv.indexOf('--port');

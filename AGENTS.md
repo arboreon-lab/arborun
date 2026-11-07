@@ -96,5 +96,6 @@ Arborun｜设计与协作规则
    ├─ 右上角只保留一键折叠与 View 两个图标，不加文字。
    ├─ 2026-11-07：试过内嵌在对话中；用户决定改回侧栏（fullscreen），保留折叠为概览、展开为详情。
    ├─ pnpm build:mcp 构建后自动重新安装插件到本机 Codex；重启 Codex 后生效。
-   └─ 插件构建产物随仓库提交；一行安装：codex plugin marketplace add arboreon-lab/arborun && codex plugin add arborun@arborun
+   ├─ 插件构建产物随仓库提交；一行安装：codex plugin marketplace add arboreon-lab/arborun && codex plugin add arborun@arborun
+   └─ 通用 MCP 工具：mcp 分支是无依赖 npx 包（scripts/publish-mcp-branch.mjs 发布），install 子命令写入各工具配置。
 ```

@@ -14,4 +14,17 @@ await build({ entryPoints: ['src/mcp/index.ts'], bundle: true, platform: 'node',
 await mkdir('plugins/arborun/dist-mcp', { recursive: true });
 await cp('dist-mcp', 'plugins/arborun/dist-mcp', { recursive: true });
 console.log('Arborun MCP: dist-mcp/index.mjs + tree.html');
+// A dependency-free package for any MCP client:  npx -y github:arboreon-lab/arborun#mcp  (published by scripts/publish-mcp-branch.mjs)
+const { readFile } = await import('node:fs/promises');
+const version = JSON.parse(await readFile('plugins/arborun/plugin.json', 'utf8')).version;
+await mkdir('dist-mcp-package', { recursive: true });
+await writeFile('dist-mcp-package/index.mjs', '#!/usr/bin/env node\n' + await readFile('dist-mcp/index.mjs', 'utf8'));
+await cp('dist-mcp/tree.html', 'dist-mcp-package/tree.html');
+await writeFile('dist-mcp-package/package.json', JSON.stringify({
+  name: 'arborun-mcp', version, description: 'Arborun MCP server: editable, acceptance-centred execution trees for agents',
+  type: 'module', bin: { 'arborun-mcp': 'index.mjs' }, files: ['index.mjs', 'tree.html'], engines: { node: '>=22' },
+  repository: 'github:arboreon-lab/arborun', license: 'UNLICENSED',
+}, null, 2) + '\n');
+await cp('scripts/mcp-package-README.md', 'dist-mcp-package/README.md');
+console.log('Arborun MCP package: dist-mcp-package/');
 await import('./install-codex-plugin.mjs');
