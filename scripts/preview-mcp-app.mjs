@@ -28,7 +28,7 @@ const plan = { ...basePlan, title: basePlan.title ?? 'MCP Apps SDK 集成验证 
   context: ['官方 AppBridge 测试宿主，非 Codex 原生面板；执行与检查是隔离测试数据，不代表业务修改。'] };
 const client = new Client({ name: 'arborun-sdk-test-host', version: '1.0.0' });
 const transport = new StdioClientTransport({ command: process.execPath, args: [resolve('dist-mcp/index.mjs')],
-  env: { ...process.env, ARBORUN_MCP_DATA_DIR: join(directory, 'state') }, stderr: 'pipe' });
+  env: { ...process.env, ARBORUN_MCP_DATA_DIR: join(directory, 'state'), ARBORUN_OPEN_BROWSER: '0' }, stderr: 'pipe' });
 let stderr = '';
 transport.stderr?.on('data', chunk => {
   stderr += String(chunk);

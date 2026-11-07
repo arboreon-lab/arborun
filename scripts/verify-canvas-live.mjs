@@ -18,7 +18,7 @@ const plan = sample ? { title: '画布集成验证 · 测试数据', goal: sampl
   { ...JSON.parse(await readFile('examples/mcp-canvas-plan.json', 'utf8')), title: '画布集成验证 · 测试数据' };
 const client = new Client({ name: 'arborun-canvas-verification', version: '1.0.0' });
 const transport = new StdioClientTransport({ command: process.execPath, args: [resolve('dist-mcp/index.mjs')],
-  env: { ...process.env, ARBORUN_MCP_DATA_DIR: join(directory, 'state') }, stderr: 'pipe' });
+  env: { ...process.env, ARBORUN_MCP_DATA_DIR: join(directory, 'state'), ARBORUN_OPEN_BROWSER: '0' }, stderr: 'pipe' });
 // Do not write bearer capabilities to the transcript or shared verification report.
 transport.stderr?.on('data', chunk => { if (!String(chunk).includes('local panel:')) process.stderr.write(chunk); });
 await client.connect(transport);

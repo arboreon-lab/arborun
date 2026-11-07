@@ -12,7 +12,8 @@ async function connect() {
   const client = new Client({ name: 'arborun-stdio-check', version: '1' });
   clients.push(client);
   await client.connect(new StdioClientTransport({ command: process.execPath, args: [resolve('dist-mcp/index.mjs')],
-    env: { ...process.env, ARBORUN_MCP_DATA_DIR: data }, stderr: 'pipe' }));
+    // A test client has no UI; keep the server from opening the panel in the user's browser.
+    env: { ...process.env, ARBORUN_MCP_DATA_DIR: data, ARBORUN_OPEN_BROWSER: '0' }, stderr: 'pipe' }));
   return client;
 }
 try {
